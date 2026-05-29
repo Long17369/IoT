@@ -5,7 +5,7 @@ interface MenuItemData {
   index: string
   label: string
   icon?: Component
-  component: Component
+  component?: Component
 }
 
 interface SubMenuData {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElAside, ElContainer, ElFooter, ElHeader, ElMain, ElMenu } from 'element-plus'
 import {
-  HomeFilled,
   InfoFilled,
   PhoneFilled,
   Service,
@@ -13,21 +13,21 @@ import {
   DataBoard,
   DataAnalysis,
   TrendCharts,
+  Warning,
+  Bell,
+  Setting,
+  Odometer,
 } from '@element-plus/icons-vue'
 import { ElIcon } from 'element-plus'
 import HeaderCom from './component/HeaderCom.vue'
 import MenuCom from './component/MenuCom.vue'
-import type { MenuList, MenuData } from './types/menuType'
-import Home from './views/Home.vue'
-import About from './views/About.vue'
-import Contact from './views/Contact.vue'
-import WebDev from './views/WebDev.vue'
-import MobileDev from './views/MobileDev.vue'
-import DataView from './views/DataView.vue'
-import LatestData from './views/LatestData.vue'
+import type { MenuList } from './types/menuType'
+
+const router = useRouter()
+const route = useRoute()
 
 const menuItems: MenuList = [
-  { index: '/', label: '首页', type: 'item', icon: HomeFilled, component: Home },
+  { index: '/', label: '仪表盘', type: 'item', icon: Odometer },
   {
     index: '/data',
     label: '数据监控',
@@ -39,38 +39,52 @@ const menuItems: MenuList = [
         label: '数据总览',
         type: 'item',
         icon: DataAnalysis,
-        component: DataView,
       },
       {
         index: '/data/latest',
         label: '最新数据',
         type: 'item',
         icon: TrendCharts,
-        component: LatestData,
+      },
+      {
+        index: '/data/faults',
+        label: '故障历史',
+        type: 'item',
+        icon: Warning,
       },
     ],
   },
-  { index: '/about', label: '关于', type: 'item', icon: InfoFilled, component: About },
-  { index: '/contact', label: '联系我们', type: 'item', icon: PhoneFilled, component: Contact },
+  {
+    index: '/control',
+    label: '储运控制',
+    type: 'item',
+    icon: Setting,
+  },
+  { index: '/about', label: '关于', type: 'item', icon: InfoFilled },
+  { index: '/contact', label: '联系我们', type: 'item', icon: PhoneFilled },
   {
     index: '/services',
-    label: '服务',
+    label: '终端监控',
     type: 'submenu',
     icon: Service,
     children: [
       {
         index: '/services/web-dev',
-        label: 'Web 开发',
+        label: 'Web 远程终端',
         type: 'item',
         icon: Monitor,
-        component: WebDev,
       },
       {
         index: '/services/mobile-dev',
-        label: '移动开发',
+        label: '移动端终端',
         type: 'item',
         icon: Iphone,
-        component: MobileDev,
+      },
+      {
+        index: '/services/local-display',
+        label: '本地设备显示',
+        type: 'item',
+        icon: Bell,
       },
     ],
   },
@@ -92,10 +106,10 @@ function toggleSidebar() {
   isCollapse.value = !isCollapse.value
 }
 
-// 移动端点击菜单项后自动收起侧栏
+// 使用 vue-router 导航
 function onSelect(index: string) {
   activeIndex.value = index
-  window.location.hash = '#' + index
+  router.push(index)
   if (isMobile.value) {
     isCollapse.value = true
   }
@@ -108,40 +122,14 @@ function closeSidebar() {
   }
 }
 
-// 从菜单树中扁平查找组件
-function findComponentByIndex(items: MenuList, target: string): MenuData | undefined {
-  for (const item of items) {
-    if (item.type === 'item' && item.index === target) return item
-    if (item.type === 'submenu') {
-      const found = findComponentByIndex(item.children, target)
-      if (found) return found
-    }
-  }
-}
-
-function getHashPath(): string {
-  return window.location.hash.replace(/^#/, '') || '/'
-}
-
-const activeIndex = ref(getHashPath())
-
-const currentComponent = computed(() => {
-  const item = findComponentByIndex(menuItems, activeIndex.value)
-  return item && item.type === 'item' ? item.component : Home
-})
-
-function onHashChange() {
-  activeIndex.value = getHashPath()
-}
+const activeIndex = ref(route.path)
 
 onMounted(() => {
-  window.addEventListener('hashchange', onHashChange)
   window.addEventListener('resize', updateMobile)
   updateMobile()
 })
 
 onUnmounted(() => {
-  window.removeEventListener('hashchange', onHashChange)
   window.removeEventListener('resize', updateMobile)
 })
 </script>
@@ -180,14 +168,16 @@ onUnmounted(() => {
           <MenuCom v-for="item in menuItems" :key="item.index" :item="item" />
         </ElMenu>
       </ElAside>
-      <ElMain class="main-content">
-        <div class="main-view">
-          <component :is="currentComponent" />
-        </div>
+      <ElContainer>
+        <ElMain class="main-content">
+          <div class="main-view">
+            <router-view />
+          </div>
+        </ElMain>
         <ElFooter class="main-footer">
           <div class="footer-content">IoT 物联网平台 &copy; 2026</div>
         </ElFooter>
-      </ElMain>
+      </ElContainer>
     </ElContainer>
   </ElContainer>
 </template>
@@ -293,8 +283,9 @@ body {
 
 .main-view {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 0;
+  min-height: 0;
 }
 
 .main-footer {

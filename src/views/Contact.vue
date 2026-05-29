@@ -1,4 +1,6 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+defineOptions({ name: 'ContactPage' })
+</script>
 
 <template>
   <div class="contact-page">
