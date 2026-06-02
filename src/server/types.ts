@@ -44,7 +44,7 @@ export interface Data {
   field9: string | null
   field10: string | null
   c_time: string // ISO 8601 格式
-  online: string | null // "实时数据" | "保存数据"
+  online: string | null // "实时数据" | "实时数据"
 }
 
 export interface DirectConfig {
@@ -146,6 +146,7 @@ export interface DataPayload extends MQTTMessageBase {
   Tin: string
   Tout: string
   LXin: string
+  out_net?: 'true'
 }
 
 // 设备控制状态 (device_control)
