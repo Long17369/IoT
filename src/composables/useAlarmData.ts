@@ -1,11 +1,6 @@
 import { ref, computed } from 'vue'
-import {
-  getData,
-  getDataMapper,
-  getCount,
-  getTimeRange,
-} from '@/server/api'
-import type { Data, FrontendDataQueryParams, FieldMapper } from '@/server/types'
+import { getData, getDataMapper, getCount, getTimeRange } from '@/server/api'
+import type { Data, FrontendDataQueryParams, FieldMapper, Where } from '@/server/types'
 
 export function useAlarmData() {
   const data = ref<Data[]>([])
@@ -50,7 +45,7 @@ export function useAlarmData() {
     }
   }
 
-  async function fetchCount(where?: object) {
+  async function fetchCount(where?: Where) {
     try {
       const result = await getCount('error', where || queryParams.value.where || {})
       totalCount.value = result.count
@@ -61,7 +56,7 @@ export function useAlarmData() {
     }
   }
 
-  async function fetchTimeRange(where?: object) {
+  async function fetchTimeRange(where?: Where) {
     try {
       return await getTimeRange('error', where || queryParams.value.where || {})
     } catch (err) {

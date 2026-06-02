@@ -11,12 +11,10 @@ import type {
   UpdateDirectParams,
   FetchOptions,
   FrontendDataQueryParams,
+  Where,
 } from './types'
 
 const BASE_URL = '/api'
-export const WS_URL = '/ws'
-
-
 
 /**
  * 通用 API 请求函数
@@ -65,7 +63,7 @@ export async function getData(
  * @param where 查询条件
  * @returns Promise<DataCount>
  */
-export async function getCount(table: string, where: object) {
+export async function getCount(table: string, where: Where) {
   const queryString = new URLSearchParams({
     where: JSON.stringify(where),
   })
@@ -78,7 +76,7 @@ export async function getCount(table: string, where: object) {
  * @param where 查询条件
  * @returns Promise<{ minTime: string; maxTime: string }>
  */
-export async function getTimeRange(table: string, where: object = {}) {
+export async function getTimeRange(table: string, where: Where = {}) {
   const queryString = new URLSearchParams({
     where: JSON.stringify(where),
   })

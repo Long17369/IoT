@@ -7,7 +7,7 @@ import DeviceStatusTag from '@/component/dashboard/DeviceStatusTag.vue'
 import ControlPanel from '@/component/control/ControlPanel.vue'
 import { getDevice, fetchDirectConfig, fetchDirectData } from '@/server/api'
 import { useWebSocket } from '@/composables/useWebSocket'
-import type { Device, DirectConfig, Direct } from '@/types/api'
+import type { Device, DirectConfig, Direct } from '@/server/types'
 
 const { getDeviceSensorData, getDeviceOnline } = useWebSocket()
 

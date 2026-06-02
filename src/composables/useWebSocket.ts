@@ -1,14 +1,19 @@
 import { ref, shallowRef } from 'vue'
-import { WS_URL } from '@/server/api'
-import type { WsSensorData, WsDeviceStatus, WsAlarm, WsMessage } from '@/types/api'
+import type { WsData, WsDeviceStatus, WsAlarm, WsMessage } from '@/server/types'
 
 /**
  * WebSocket 单例连接管理器
  * 全局只有一个 WebSocket 连接，多组件共享
  */
 
+// 开发环境通过 Vite proxy 代理到后端，生产环境直连
+const WS_URL =
+  import.meta.env.MODE === 'development'
+    ? `ws://${window.location.hostname}:${window.location.port}/ws`
+    : `ws://${window.location.hostname}:${import.meta.env.VITE_API_PORT || '10452'}/ws`
+
 const connected = ref(false)
-const latestSensorData = shallowRef<Map<string, WsSensorData>>(new Map())
+const latestSensorData = shallowRef<Map<string, WsData>>(new Map())
 const deviceStatuses = shallowRef<Map<string, WsDeviceStatus>>(new Map())
 const alarms = ref<WsAlarm[]>([])
 
@@ -64,11 +69,8 @@ function scheduleReconnect() {
 
 function handleMessage(msg: WsMessage) {
   switch (msg.event) {
-    case 'connected':
-      console.log('[WebSocket] 服务器确认连接:', msg.data)
-      break
-    case 'sensor_data': {
-      const data = msg.data as WsSensorData
+    case 'data': {
+      const data = msg.data as WsData
       const newMap = new Map(latestSensorData.value)
       newMap.set(data.d_no, data)
       latestSensorData.value = newMap
@@ -108,12 +110,14 @@ connect()
  * 所有组件共享同一连接，数据响应式同步
  */
 export function useWebSocket() {
-  function getDeviceSensorData(d_no: string): WsSensorData | undefined {
+  function getDeviceSensorData(d_no: string): WsData | undefined {
     return latestSensorData.value.get(d_no)
   }
 
   function getDeviceOnline(d_no: string): boolean {
-    return deviceStatuses.value.get(d_no)?.online ?? false
+    const status = deviceStatuses.value.get(d_no)
+    if (!status) return false
+    return status.online === 'true'
   }
 
   function clearAlarms() {

@@ -7,7 +7,7 @@ import DeviceStatusTag from '@/component/dashboard/DeviceStatusTag.vue'
 import AlarmBanner from '@/component/alarm/AlarmBanner.vue'
 import { getDevice } from '@/server/api'
 import { useWebSocket } from '@/composables/useWebSocket'
-import type { Device } from '@/types/api'
+import type { Device } from '@/server/types'
 
 const { getDeviceSensorData, getDeviceOnline, alarms, clearAlarms } = useWebSocket()
 

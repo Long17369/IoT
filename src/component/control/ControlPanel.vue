@@ -4,7 +4,7 @@ import { ElSelect, ElOption } from 'element-plus'
 import ControlSwitch from './ControlSwitch.vue'
 import ControlSlider from './ControlSlider.vue'
 import { updateDirectData } from '@/server/api'
-import type { DirectConfig, Direct } from '@/types/api'
+import type { DirectConfig, Direct } from '@/server/types'
 
 interface Props {
   configs: DirectConfig[]

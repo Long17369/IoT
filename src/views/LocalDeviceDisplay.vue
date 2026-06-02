@@ -3,15 +3,15 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { ElTag, ElTabs, ElTabPane, ElSelect, ElOption } from 'element-plus'
 import { getData, getDataMapper, getDevice } from '../server/api'
 import { useWebSocket } from '@/composables/useWebSocket'
-import type { Data, FieldMapper, Device, DbName } from '../types/api'
+import type { Data, FieldMapper, Device, DbName } from '@/server/types'
 
 const latestRecord = ref<Data | null>(null)
 const fieldMappers = ref<FieldMapper[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-// WebSocket 实时告警
-const { alarms } = useWebSocket()
+// WebSocket 实时告警 + 传感器数据
+const { alarms, latestSensorData } = useWebSocket()
 
 // 设备选择
 const devices = ref<Device[]>([])
@@ -80,6 +80,31 @@ onMounted(async () => {
 watch([activeTable, selectedDevice], () => {
   loadData()
 })
+
+// 监听 WebSocket 实时数据，更新 latestRecord
+watch(
+  () => (selectedDevice.value ? latestSensorData.value.get(selectedDevice.value) : undefined),
+  (wsData) => {
+    if (wsData && selectedDevice.value) {
+      latestRecord.value = {
+        id: latestRecord.value?.id ?? 0,
+        d_no: wsData.d_no,
+        field1: wsData.temp,
+        field2: wsData.humi,
+        field3: wsData.light,
+        field4: null,
+        field5: null,
+        field6: null,
+        field7: null,
+        field8: null,
+        field9: null,
+        field10: null,
+        c_time: wsData.timestamp,
+        online: '实时数据',
+      }
+    }
+  },
+)
 
 const sortedMappers = computed(() =>
   fieldMappers.value.filter((m) => m.visible === '1').sort((a, b) => a.id - b.id),

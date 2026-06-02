@@ -1,11 +1,6 @@
 import { ref, computed } from 'vue'
-import {
-  getData,
-  getDataMapper,
-  getCount,
-  getTimeRange,
-} from '@/server/api'
-import type { Data, FrontendDataQueryParams, FieldMapper } from '@/server/types'
+import { getData, getDataMapper, getCount, getTimeRange } from '@/server/api'
+import type { Data, FrontendDataQueryParams, FieldMapper, Where } from '@/server/types'
 
 export function useSensorData() {
   // 数据状态
@@ -57,7 +52,7 @@ export function useSensorData() {
   }
 
   // 获取数据总数
-  async function fetchCount(where?: object) {
+  async function fetchCount(where?: Where) {
     try {
       const result = await getCount('data', where || queryParams.value.where || {})
       totalCount.value = result.count
@@ -69,7 +64,7 @@ export function useSensorData() {
   }
 
   // 获取时间范围
-  async function fetchTimeRange(where?: object) {
+  async function fetchTimeRange(where?: Where) {
     try {
       const result = await getTimeRange('data', where || queryParams.value.where || {})
       return result

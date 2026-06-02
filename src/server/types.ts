@@ -131,25 +131,25 @@ export interface DataQueryParams {
 // ========== MQTT 消息类型 ==========
 // TODO: 根据实际业务需求调整字段类型和命名，确保与 MQTT 消息格式一致
 
-export interface MQTTMessage {
+export interface MQTTMessageBase {
   Real_Time: string // 心跳时间, HH:mm:ss 格式
 }
 
 // 心跳消息 (heartbeat)
-export interface HeartbeatPayload extends MQTTMessage {
+export interface HeartbeatPayload extends MQTTMessageBase {
   VID: string // 设备编号 (d_no)
   online: string // "true" 或 "false"
 }
 
 // 数据信息 (data)
-export interface DataPayload extends MQTTMessage {
+export interface DataPayload extends MQTTMessageBase {
   Tin: string
   Tout: string
   LXin: string
 }
 
 // 设备控制状态 (device_control)
-export interface DeviceControlPayload extends MQTTMessage {
+export interface DeviceControlPayload extends MQTTMessageBase {
   Real_Time: string
   mode: string
   TinDL: string
@@ -162,8 +162,27 @@ export interface DeviceControlPayload extends MQTTMessage {
   SpeedM1: string
 }
 
+type DeviceControlPayloadOUTRefId =
+  | 'Real_time'
+  | 'mode'
+  | 'TinDL'
+  | 'TinDH'
+  | 'LXD'
+  | 'HinD'
+  | 'light_status'
+  | 'Bright'
+  | 'fan_mode'
+  | 'SpeedM2'
+  | 'SpeedM1'
+  | 'fan_status'
+  | 'kongtiao_status'
+
+type DeviceControlPayloadOUT = {
+  [key in DeviceControlPayloadOUTRefId]?: string
+}
+
 // 设备状态信息 (device_status)
-export interface DeviceStatusPayload extends MQTTMessage {
+export interface DeviceStatusPayload extends MQTTMessageBase {
   gas: string
   humi_over: string
   fan_status: string
@@ -176,11 +195,42 @@ export interface VIDPIDInfo {
   PID: string
 }
 
+// MQTT 入
+interface MQTTMapper {
+  heartbeat: HeartbeatPayload
+  data: DataPayload
+  device_control: DeviceControlPayload
+  device_status: DeviceStatusPayload
+  VID_PID: VIDPIDInfo
+}
+
+export type MQTTTopic = keyof MQTTMapper
+export type MQTTPayload<T extends MQTTTopic> = MQTTMapper[T]
+
+export interface MQTTMessage {
+  topic: MQTTTopic
+  payload: MQTTPayload<MQTTTopic>
+}
+
+// MQTT 出
+interface MQTTMapperOut {
+  'device_control/': DeviceControlPayloadOUT
+}
+
+export type MQTTTopicOut = keyof MQTTMapperOut
+export type MQTTPayloadOut<T extends MQTTTopicOut> = MQTTMapperOut[T]
+
+export interface MQTTMessageOut {
+  topic: MQTTTopicOut
+  d_no?: string
+  payload: MQTTPayloadOut<MQTTTopicOut>
+}
+
 // ========== WebSocket 推送事件类型 ==========
-export type WsEventType = 'sensor_data' | 'device_status' | 'device_status_sync' | 'alarm'
+export type WsEventType = 'data' | 'device_status' | 'device_status_sync' | 'alarm'
 
 // WebSocket 传感器数据推送
-export interface WsSensorData {
+export interface WsData {
   d_no: string
   timestamp: string
   temp: string
@@ -191,7 +241,7 @@ export interface WsSensorData {
 // WebSocket 设备状态推送
 export interface WsDeviceStatus {
   d_no: string
-  online: boolean
+  online: string
   timestamp: string
 }
 
@@ -201,6 +251,13 @@ export interface WsAlarm {
   type: string // 'alarm' | 'error'
   message: string
   timestamp: string
+}
+
+export type WsMessageData = WsData | WsDeviceStatus | WsAlarm | WsDeviceStatus[]
+
+export interface WsMessage {
+  event: WsEventType
+  data: WsMessageData
 }
 
 /** 前端 getData 查询参数（对应 URL query string） */

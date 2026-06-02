@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { WarningFilled, Close } from '@element-plus/icons-vue'
-import type { WsAlarm } from '@/types/api'
+import type { WsAlarm } from '@/server/types'
 
 const props = defineProps<{
   alarms: WsAlarm[]

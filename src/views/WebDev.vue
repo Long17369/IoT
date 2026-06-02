@@ -3,9 +3,12 @@ import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { ElTag, ElButton, ElIcon, ElTabs, ElTabPane } from 'element-plus'
 import { Bell, WarningFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import { getData, getDataMapper } from '../server/api'
+import { useWebSocket } from '@/composables/useWebSocket'
 import DataChart from '../component/data/DataChart.vue'
-import type { Data, FieldMapper } from '../types/api'
+import type { Data, FieldMapper } from '@/server/types'
 import type { DbName } from '@/server/types'
+
+const { latestSensorData } = useWebSocket()
 
 // ========== 数据状态 ==========
 const latestRecord = ref<Data | null>(null)
@@ -13,6 +16,9 @@ const recentRecords = ref<Data[]>([])
 const fieldMappers = ref<FieldMapper[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
+
+// 当前追踪的设备编号
+const trackedDevice = ref<string | null>(null)
 
 // 数据类型 tab
 const activeTable = ref<'temp' | 'humi' | 'light'>('temp')
@@ -118,6 +124,7 @@ async function loadData() {
     if (latestData) {
       latestRecord.value = latestData
       recentRecords.value = data.slice(0, 6).reverse()
+      trackedDevice.value = latestData.d_no
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '获取数据失败'
@@ -126,11 +133,33 @@ async function loadData() {
   }
 }
 
-let refreshTimer: ReturnType<typeof setInterval> | null = null
+// 监听 WebSocket 实时数据，更新 latestRecord
+watch(
+  () => (trackedDevice.value ? latestSensorData.value.get(trackedDevice.value) : undefined),
+  (wsData) => {
+    if (wsData && trackedDevice.value) {
+      latestRecord.value = {
+        id: latestRecord.value?.id ?? 0,
+        d_no: wsData.d_no,
+        field1: wsData.temp,
+        field2: wsData.humi,
+        field3: wsData.light,
+        field4: null,
+        field5: null,
+        field6: null,
+        field7: null,
+        field8: null,
+        field9: null,
+        field10: null,
+        c_time: wsData.timestamp,
+        online: '实时数据',
+      }
+    }
+  },
+)
 
 onMounted(() => {
   loadData()
-  refreshTimer = setInterval(loadData, 10000)
 })
 
 // 切换 tab 重新加载
@@ -139,7 +168,6 @@ watch(activeTable, () => {
 })
 
 onBeforeUnmount(() => {
-  if (refreshTimer) clearInterval(refreshTimer)
   stopFlash()
 })
 

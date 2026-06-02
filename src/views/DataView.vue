@@ -6,7 +6,7 @@ import DataFilter from '../component/data/DataFilter.vue'
 import { getData, getDataMapper, getCount, getDevice } from '../server/api'
 import type { ColumnDef } from '../types/dataType'
 import type { FilterOption, FilterValue } from '../component/data/DataFilter.vue'
-import type { Data, FieldMapper } from '../types/api'
+import type { Data, FieldMapper } from '@/server/types'
 
 // 当前选中的数据类型 tab
 const activeTable = ref<'temp' | 'humi' | 'light'>('temp')

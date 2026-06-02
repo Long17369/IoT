@@ -16,7 +16,7 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 
 // WebSocket 实时数据
-const { getDeviceOnline } = useWebSocket()
+const { getDeviceOnline, latestSensorData } = useWebSocket()
 
 // 设备选择
 const devices = ref<Device[]>([])
@@ -125,6 +125,31 @@ watch([selectedDevice, activeTable], async () => {
   await loadMappers()
   loadHistoryData()
 })
+
+// 监听 WebSocket 实时数据，更新 latestRecord
+watch(
+  () => (selectedDevice.value ? latestSensorData.value.get(selectedDevice.value) : undefined),
+  (wsData) => {
+    if (wsData && selectedDevice.value) {
+      latestRecord.value = {
+        id: latestRecord.value?.id ?? 0,
+        d_no: wsData.d_no,
+        field1: wsData.temp,
+        field2: wsData.humi,
+        field3: wsData.light,
+        field4: null,
+        field5: null,
+        field6: null,
+        field7: null,
+        field8: null,
+        field9: null,
+        field10: null,
+        c_time: wsData.timestamp,
+        online: '实时数据',
+      }
+    }
+  },
+)
 </script>
 
 <template>
