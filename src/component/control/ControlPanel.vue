@@ -127,10 +127,62 @@ async function handleSelectChange(config: DirectConfig, value: string) {
     .catch((e) => console.error('指令下发失败:', e))
 }
 
-/** 判断指令是否应该显示 */
-function shouldShow(config: DirectConfig): boolean {
-  return ['1', '2', '3', '5'].includes(config.f_type)
+/** 构建 configId → DirectConfig 的映射 */
+const configMap = computed(() => {
+  const map = new Map<string, DirectConfig>()
+  for (const c of props.configs) {
+    map.set(c.id, c)
+  }
+  return map
+})
+
+/**
+ * 判断指令是否应该显示（基于 f_type 和父项条件，递归检查祖先可见性）
+ */
+const visibilityCache = new Map<string, boolean>()
+
+function isConfigVisible(config: DirectConfig): boolean {
+  const cached = visibilityCache.get(config.id)
+  if (cached !== undefined) return cached
+
+  if (!['1', '2', '3', '5'].includes(config.f_type)) {
+    visibilityCache.set(config.id, false)
+    return false
+  }
+
+  if (!config.ref_id) {
+    visibilityCache.set(config.id, true)
+    return true
+  }
+
+  const parent = configMap.value.get(config.ref_id)
+  if (!parent || !isConfigVisible(parent)) {
+    visibilityCache.set(config.id, false)
+    return false
+  }
+
+  const parentValue = getDirectValue(config.ref_id)
+  if (parentValue === null || parentValue === undefined || parentValue === '') {
+    visibilityCache.set(config.id, false)
+    return false
+  }
+
+  if (!config.ref_value) {
+    visibilityCache.set(config.id, true)
+    return true
+  }
+
+  const allowedValues = config.ref_value.split('|')
+  const result = allowedValues.includes(parentValue)
+  visibilityCache.set(config.id, result)
+  return result
 }
+
+watch([() => props.configs, () => props.directValues], () => {
+  visibilityCache.clear()
+})
+
+const visibleConfigs = computed(() => props.configs.filter(isConfigVisible))
 
 function parseOptionValue(opt: string): { label: string; value: string }[] {
   return opt.split('|').map((item) => {
@@ -140,8 +192,6 @@ function parseOptionValue(opt: string): { label: string; value: string }[] {
       : { label: item, value: item }
   })
 }
-
-const visibleConfigs = computed(() => props.configs.filter(shouldShow))
 </script>
 
 <template>
@@ -226,6 +276,7 @@ const visibleConfigs = computed(() => props.configs.filter(shouldShow))
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow: auto;
 }
 
 /* 列表过渡动画 */

@@ -166,16 +166,19 @@ async function onControlUpdated() {
 
 <style scoped>
 .storage-control {
+  height: 100%;
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
+  overflow: hidden;
 }
 
 .control-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .control-toolbar h2 {
@@ -196,9 +199,11 @@ async function onControlUpdated() {
 }
 
 .control-layout {
+  flex: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
+  min-height: 0;
 }
 
 @media (max-width: 768px) {
@@ -213,6 +218,10 @@ async function onControlUpdated() {
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sensor-panel h3,
@@ -223,12 +232,22 @@ async function onControlUpdated() {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .sensor-readings {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.control-panel-wrapper > :deep(.control-panel) {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .empty-hint,

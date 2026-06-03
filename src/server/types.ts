@@ -164,7 +164,7 @@ export interface DeviceControlPayload extends MQTTMessageBase {
 }
 
 type DeviceControlPayloadOUTRefId =
-  | 'Real_time'
+  | 'Real_Time'
   | 'mode'
   | 'TinDL'
   | 'TinDH'

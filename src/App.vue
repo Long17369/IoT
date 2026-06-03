@@ -278,12 +278,12 @@ body {
 .main-content {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: hidden !important;
 }
 
 .main-view {
   flex: 1;
-  overflow: hidden;
+  overflow: -moz-hidden-unscrollable;
   padding: 0;
   min-height: 0;
 }
