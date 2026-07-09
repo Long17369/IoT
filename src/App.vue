@@ -60,8 +60,6 @@ const menuItems: MenuList = [
     type: 'item',
     icon: Setting,
   },
-  { index: '/about', label: '关于', type: 'item', icon: InfoFilled },
-  { index: '/contact', label: '联系我们', type: 'item', icon: PhoneFilled },
   {
     index: '/services',
     label: '终端监控',

@@ -253,8 +253,8 @@ async function onTabChange(tab: 'temp' | 'humi' | 'light') {
       v-model="activeTable"
       @tab-change="(tab: any) => onTabChange(tab as 'temp' | 'humi' | 'light')"
     >
-      <ElTabPane label="🌡 温度" name="temp" />
-      <ElTabPane label="💧 湿度" name="humi" />
+      <ElTabPane label="🌡 温度(内)" name="temp" />
+      <ElTabPane label="💧 温度(外)" name="humi" />
       <ElTabPane label="☀ 光照" name="light" />
     </ElTabs>
 

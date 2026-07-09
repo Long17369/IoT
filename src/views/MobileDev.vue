@@ -101,8 +101,8 @@ const sortedMappers = computed(() =>
 
     <!-- 数据类型 Tab（已禁用，恢复时去掉 v-if="false"） -->
     <ElTabs v-if="false" v-model="activeTable" size="small">
-      <ElTabPane label="温度" name="temp" />
-      <ElTabPane label="湿度" name="humi" />
+      <ElTabPane label="温度(内)" name="temp" />
+      <ElTabPane label="温度(外)" name="humi" />
       <ElTabPane label="光照" name="light" />
     </ElTabs>
 

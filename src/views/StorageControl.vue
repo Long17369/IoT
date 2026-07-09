@@ -21,7 +21,7 @@ onMounted(async () => {
   try {
     devices.value = await getDevice()
     if (devices.value.length > 0) {
-      selectedDevice.value = devices.value[0]?.number || devices.value[0]?.device_name || ''
+      selectedDevice.value = devices.value[0]?.device_name || devices.value[0]?.number || ''
       await loadDeviceConfig()
     }
   } catch (e) {
@@ -126,13 +126,13 @@ async function onControlUpdated() {
           </h3>
           <div class="sensor-readings">
             <StatusCard
-              title="温度"
+              title="温度(内)"
               :value="sensorData?.temp ?? '--'"
               unit="°C"
               :status="'normal'"
             />
             <StatusCard
-              title="湿度"
+              title="温度(外)"
               :value="sensorData?.humi ?? '--'"
               unit="%"
               :status="'normal'"

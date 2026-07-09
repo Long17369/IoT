@@ -34,18 +34,6 @@ const router = createRouter({
       meta: { title: '故障历史' },
     },
     {
-      path: '/about',
-      name: 'About',
-      component: () => import('@/views/About.vue'),
-      meta: { title: '关于' },
-    },
-    {
-      path: '/contact',
-      name: 'Contact',
-      component: () => import('@/views/Contact.vue'),
-      meta: { title: '联系我们' },
-    },
-    {
       path: '/services/web-dev',
       name: 'WebDev',
       component: () => import('@/views/WebDev.vue'),

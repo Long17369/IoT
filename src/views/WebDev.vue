@@ -120,8 +120,8 @@ const chartColumns = computed(() => {
       <div class="card-panel" v-loading="loading">
         <h3>📡 实时数据监控</h3>
         <ElTabs v-if="false" v-model="activeTable" size="small">
-          <ElTabPane label="温度" name="temp" />
-          <ElTabPane label="湿度" name="humi" />
+          <ElTabPane label="温度(内)" name="temp" />
+          <ElTabPane label="温度(外)" name="humi" />
           <ElTabPane label="光照" name="light" />
         </ElTabs>
         <div v-if="error" class="error-state">{{ error }}</div>

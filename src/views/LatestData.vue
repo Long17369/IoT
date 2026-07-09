@@ -30,7 +30,7 @@ onMounted(async () => {
     const devList = await getDevice()
     devices.value = devList
     if (devList.length > 0) {
-      selectedDevice.value = devList[0]?.number || devList[0]?.device_name || ''
+      selectedDevice.value = devList[0]?.device_name || ''
     }
   } catch (e) {
     console.error('获取设备列表失败:', e)
@@ -176,8 +176,8 @@ watch(
 
     <!-- 数据类型 Tab（已禁用，恢复时去掉 v-if="false"） -->
     <ElTabs v-if="false" v-model="activeTable">
-      <ElTabPane label="🌡 温度" name="temp" />
-      <ElTabPane label="💧 湿度" name="humi" />
+      <ElTabPane label="🌡 温度(内)" name="temp" />
+      <ElTabPane label="💧 温度(外)" name="humi" />
       <ElTabPane label="☀ 光照" name="light" />
     </ElTabs>
 

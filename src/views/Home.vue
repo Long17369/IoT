@@ -18,14 +18,14 @@ onMounted(async () => {
   try {
     devices.value = await getDevice()
     if (devices.value.length > 0) {
-      selectedDevice.value = devices.value[0]?.number ?? ''
+      selectedDevice.value = devices.value[0]?.device_name ?? ''
     }
   } catch (e) {
     console.error('获取设备列表失败:', e)
   }
 })
 
-const currentDevice = computed(() => devices.value.find((d) => d.number === selectedDevice.value))
+const currentDevice = computed(() => devices.value.find((d) => d.device_name === selectedDevice.value))
 
 const sensorData = computed(() => {
   if (!selectedDevice.value) return undefined
@@ -85,7 +85,7 @@ function humiStatus(value: string): 'normal' | 'warning' | 'danger' {
       <DeviceStatusTag
         v-for="d in devices"
         :key="d.number"
-        :online="getDeviceOnline(d.number)"
+        :online="getDeviceOnline(d.device_name)"
         :device-name="d.device_name"
         :device-number="d.number"
       />
@@ -95,14 +95,14 @@ function humiStatus(value: string): 'normal' | 'warning' | 'danger' {
     <!-- 传感器数据卡片 -->
     <div class="sensor-grid">
       <StatusCard
-        title="温度"
+        title="温度(内)"
         :value="sensorData?.temp ?? '--'"
         unit="°C"
         :status="sensorData ? tempStatus(sensorData.temp) : 'normal'"
         :trend="'stable'"
       />
       <StatusCard
-        title="湿度"
+        title="温度(外)"
         :value="sensorData?.humi ?? '--'"
         unit="%"
         :status="sensorData ? humiStatus(sensorData.humi) : 'normal'"
