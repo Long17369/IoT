@@ -67,6 +67,11 @@ function scheduleReconnect() {
   }, RECONNECT_DELAY)
 }
 
+/** 清除指定设备的所有预警横幅（模块顶层，供 handleMessage 与组件共享） */
+function clearDeviceAlarms(d_no: string) {
+  alarms.value = alarms.value.filter((a) => a.d_no !== d_no)
+}
+
 function handleMessage(msg: WsMessage) {
   switch (msg.event) {
     case 'data': {
@@ -105,11 +110,6 @@ export function useWebSocket() {
 
   function clearAlarms() {
     alarms.value = []
-  }
-
-  /** 清除指定设备的所有预警横幅 */
-  function clearDeviceAlarms(d_no: string) {
-    alarms.value = alarms.value.filter((a) => a.d_no !== d_no)
   }
 
   return {
