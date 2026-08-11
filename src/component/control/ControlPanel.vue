@@ -39,12 +39,13 @@ watch(
   },
 )
 
-/** 根据 config_id 获取当前指令值 */
-function getDirectValue(configId: string): string | null {
+/** 根据 config_id 获取当前指令值；directValues 无值/为空时回退配置默认值 */
+function getDirectValue(configId: string, fallback?: string | null): string | null {
   const value = localValues.value[configId]
   if (value !== undefined) return value
   const item = props.directValues.find((d) => d.config_id === configId)
-  return item?.value ?? null
+  if (item?.value !== null && item?.value !== undefined && item?.value !== '') return item.value
+  return fallback ?? null
 }
 
 /** 解析 f_value（格式: "标签1:值1|标签2:值2"），返回 [offCode, onCode, offLabel, onLabel] */
@@ -58,7 +59,7 @@ function parseSwitchCodes(fValue: string): [string, string, string, string] {
 
 /** 解析 f_type=1 开关的当前值 */
 function isSwitchOn(config: DirectConfig): boolean {
-  const val = getDirectValue(config.id)
+  const val = getDirectValue(config.id, config.default_value)
   if (!val) return false
   if (config.f_value) {
     const [, onCode] = parseSwitchCodes(config.f_value)
@@ -78,10 +79,19 @@ function getSwitchLabels(config: DirectConfig): { off: string; on: string } {
 
 /** 获取滑动条当前数值 */
 function getSliderValue(config: DirectConfig): number {
-  const val = getDirectValue(config.id)
+  const val = getDirectValue(config.id, config.default_value)
   if (!val) return 0
   const num = parseFloat(val)
   return isNaN(num) ? 0 : num
+}
+
+/** 计算滑动条步长：int=1，float 按范围/100 自适应小数精度 */
+function getSliderStep(config: DirectConfig): number {
+  if (config.type === 'int') return 1
+  const min = config.min ? parseFloat(config.min) : 0
+  const max = config.max ? parseFloat(config.max) : 100
+  const range = max - min
+  return range > 0 ? Math.max(range / 100, 0.001) : 0.01
 }
 
 async function handleSwitchChange(config: DirectConfig, value: boolean) {
@@ -109,10 +119,18 @@ async function handleInputChange(config: DirectConfig, rawValue: string) {
   if (min !== undefined && numValue < min) return
   if (max !== undefined && numValue > max) return
 
+  // 滑动条按步长精度规整，避免浮点误差（如 0.30000000000000004）写入
+  let sendValue = String(numValue)
+  if (config.type === 'float' && config.f_type === '3') {
+    const step = getSliderStep(config)
+    const decimals = Math.max(0, Math.min(6, Math.round(-Math.log10(step))))
+    sendValue = numValue.toFixed(decimals)
+  }
+
   // 乐观更新 UI
-  localValues.value = { ...localValues.value, [config.id]: String(numValue) }
+  localValues.value = { ...localValues.value, [config.id]: sendValue }
   // 异步提交，不阻塞 UI
-  updateDirectData({ config_id: config.id, value: String(numValue), d_no: props.dNo })
+  updateDirectData({ config_id: config.id, value: sendValue, d_no: props.dNo })
     .then(() => emit('updated'))
     .catch((e) => console.error('指令下发失败:', e))
 }
@@ -145,10 +163,10 @@ function isConfigVisible(config: DirectConfig): boolean {
   const cached = visibilityCache.get(config.id)
   if (cached !== undefined) return cached
 
-  if (!['1', '2', '3', '5'].includes(config.f_type)) {
-    visibilityCache.set(config.id, false)
-    return false
-  }
+  // if (!['1', '2', '3', '5'].includes(config.f_type)) {
+  //   visibilityCache.set(config.id, false)
+  //   return false
+  // }
 
   if (!config.ref_id) {
     visibilityCache.set(config.id, true)
@@ -161,7 +179,7 @@ function isConfigVisible(config: DirectConfig): boolean {
     return false
   }
 
-  const parentValue = getDirectValue(config.ref_id)
+  const parentValue = getDirectValue(config.ref_id, parent.default_value)
   if (parentValue === null || parentValue === undefined || parentValue === '') {
     visibilityCache.set(config.id, false)
     return false
@@ -182,7 +200,11 @@ watch([() => props.configs, () => props.directValues], () => {
   visibilityCache.clear()
 })
 
-const visibleConfigs = computed(() => props.configs.filter(isConfigVisible))
+const visibleConfigs = computed(() =>
+  props.configs
+    .filter(isConfigVisible)
+    .sort((a, b) => (parseInt(a.order ?? '0', 10) || 0) - (parseInt(b.order ?? '0', 10) || 0)),
+)
 
 function parseOptionValue(opt: string): { label: string; value: string }[] {
   return opt.split('|').map((item) => {
@@ -216,7 +238,7 @@ function parseOptionValue(opt: string): { label: string; value: string }[] {
         <div v-else-if="config.f_type === '5'" class="control-select">
           <span class="input-label">{{ config.t_name }}</span>
           <ElSelect
-            :model-value="getDirectValue(config.id) || ''"
+            :model-value="getDirectValue(config.id, config.default_value) || ''"
             :disabled="disabled"
             placeholder="请选择"
             size="default"
@@ -237,6 +259,7 @@ function parseOptionValue(opt: string): { label: string; value: string }[] {
           :model-value="getSliderValue(config)"
           :min="config.min ? parseFloat(config.min) : 0"
           :max="config.max ? parseFloat(config.max) : 100"
+          :step="getSliderStep(config)"
           @change="(v: number) => handleInputChange(config, String(v))"
         />
 
@@ -246,7 +269,7 @@ function parseOptionValue(opt: string): { label: string; value: string }[] {
           <input
             class="threshold-input"
             type="number"
-            :value="getDirectValue(config.id) || ''"
+            :value="getDirectValue(config.id, config.default_value) || ''"
             :placeholder="'请输入' + config.t_name"
             :min="config.min || undefined"
             :max="config.max || undefined"

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { Watch, TrendCharts } from '@element-plus/icons-vue'
-import { ElIcon, ElSelect, ElOption, ElTabs, ElTabPane } from 'element-plus'
+import { ElIcon, ElSelect, ElOption } from 'element-plus'
 import DataCard from '../component/data/DataCard.vue'
 import DataChart from '../component/data/DataChart.vue'
-import { getData, getDataMapper, getDevice } from '@/server/api'
+import { getData, getDataMapper, getDataDevices } from '@/server/api'
 import { useWebSocket } from '@/composables/useWebSocket'
-import type { Data, FieldMapper, Device, Where } from '@/server/types'
+import type { Data, FieldMapper, Where } from '@/server/types'
 import type { CardField, ColumnDef } from '@/types/dataType'
 
 const latestRecord = ref<Data | null>(null)
@@ -16,21 +16,17 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 
 // WebSocket 实时数据
-const { getDeviceOnline, latestSensorData } = useWebSocket()
+const { latestSensorData } = useWebSocket()
 
-// 设备选择
-const devices = ref<Device[]>([])
+// 设备选择（有数据上报的 d_no）
+const devices = ref<string[]>([])
 const selectedDevice = ref('')
-
-// 数据类型 tab
-const activeTable = ref<'temp' | 'humi' | 'light'>('temp')
 
 onMounted(async () => {
   try {
-    const devList = await getDevice()
-    devices.value = devList
-    if (devList.length > 0) {
-      selectedDevice.value = devList[0]?.device_name || ''
+    devices.value = await getDataDevices()
+    if (devices.value.length > 0) {
+      selectedDevice.value = devices.value[0] ?? ''
     }
   } catch (e) {
     console.error('获取设备列表失败:', e)
@@ -53,9 +49,6 @@ const cardFields = computed<CardField[]>(() => {
       unit: m.unit || undefined,
       section: 'body',
       tag: true,
-      statusMap: {
-        statusMap: '',
-      },
     })
   }
   return fields
@@ -66,14 +59,11 @@ const chartColumns = computed<ColumnDef[]>(() => {
   const cols: ColumnDef[] = [{ key: 'c_time', label: '时间', chartable: false }]
   const sorted = fieldMappers.value.filter((m) => m.visible === '1').sort((a, b) => a.id - b.id)
   for (const m of sorted) {
-    // 光照的补光开始/结束是时间字符串，不应放入图表
-    const isTimeField =
-      activeTable.value === 'light' && (m.db_name === 'field3' || m.db_name === 'field4')
     cols.push({
       key: m.db_name,
       label: m.f_name,
       unit: m.unit || undefined,
-      chartable: !isTimeField,
+      chartable: m.chartable === '1',
     })
   }
   return cols
@@ -117,8 +107,8 @@ async function loadHistoryData() {
   }
 }
 
-// 切换设备或数据类型时重新加载
-watch([selectedDevice, activeTable], async () => {
+// 切换设备时重新加载
+watch(selectedDevice, async () => {
   // 切换时先清空旧数据，避免图表用旧数据渲染新配置导致 ECharts 报错
   latestRecord.value = null
   recentRecords.value = []
@@ -134,18 +124,17 @@ watch(
       latestRecord.value = {
         id: latestRecord.value?.id ?? 0,
         d_no: wsData.d_no,
-        field1: wsData.temp,
-        field2: wsData.humi,
-        field3: wsData.light,
-        field4: null,
-        field5: null,
-        field6: null,
-        field7: null,
+        field1: wsData.wen_du1,
+        field2: wsData.wen_du2,
+        field3: wsData.jia_re,
+        field4: wsData.shui_beng,
+        field5: wsData.liu_liang1,
+        field6: wsData.liu_liang2,
+        field7: wsData.ya_li,
         field8: null,
         field9: null,
         field10: null,
         c_time: wsData.timestamp,
-        online: '实时数据',
       }
     }
   },
@@ -158,28 +147,9 @@ watch(
     <div class="device-bar">
       <span class="device-label">监控设备：</span>
       <ElSelect v-model="selectedDevice" placeholder="选择设备" size="default" style="width: 200px">
-        <ElOption
-          v-for="d in devices"
-          :key="d.number || d.device_name"
-          :label="`${d.device_name} (${d.number || d.device_name})`"
-          :value="d.number || d.device_name"
-        />
+        <ElOption v-for="d in devices" :key="d" :label="d" :value="d" />
       </ElSelect>
-      <span
-        v-if="selectedDevice"
-        class="online-badge"
-        :class="getDeviceOnline(selectedDevice) ? 'online' : 'offline'"
-      >
-        {{ getDeviceOnline(selectedDevice) ? '在线' : '离线' }}
-      </span>
     </div>
-
-    <!-- 数据类型 Tab（已禁用，恢复时去掉 v-if="false"） -->
-    <ElTabs v-if="false" v-model="activeTable">
-      <ElTabPane label="🌡 温度(内)" name="temp" />
-      <ElTabPane label="💧 温度(外)" name="humi" />
-      <ElTabPane label="☀ 光照" name="light" />
-    </ElTabs>
 
     <div class="card-section">
       <h3>

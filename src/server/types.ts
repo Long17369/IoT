@@ -16,7 +16,7 @@ export interface ErrorResponse {
 
 export type ApiResponse<T> = SuccessResponse<T> | ErrorResponse
 
-export type DbName = `field${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10}`
+export type DbName = `field${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10}` | 'id' | 'd_no' | 'c_time'
 
 // 字段映射类型
 export interface FieldMapper {
@@ -27,6 +27,8 @@ export interface FieldMapper {
   unit: string // 单位
   type: '1' | '2' | '3' // 1: 文本, 2: 图片, 3: 视频
   visible: '0' | '1' // 0: 不可见, 1: 可见
+  chartable: '0' | '1' // 0: 不可图表化, 1: 可图表化
+  mapping?: string | null // 值映射词表(JSON)：值->显示名，词条全局唯一复用
 }
 
 // 传感器数据类型
@@ -44,7 +46,6 @@ export interface Data {
   field9: string | null
   field10: string | null
   c_time: string // ISO 8601 格式
-  online: string | null // "实时数据" | "实时数据"
 }
 
 export interface DirectConfig {
@@ -62,6 +63,7 @@ export interface DirectConfig {
   preffix: string | null // 前缀
   icon: string | null // 图标库中的安全证书图标符号
   type: 'int' | 'float' | 'string' | null // 数据类型
+  default_value: string | null // 默认值（t_direct 无值时的显示/回退值）
 }
 
 export interface Direct {
@@ -79,15 +81,6 @@ export interface UpdateDirectParams {
   config_id: string
   value: string
   d_no: string
-}
-
-export interface ErrorData {
-  id: number
-  d_no: string
-  e_msg: string
-  e_no: string
-  type: string
-  c_time: string
 }
 
 export interface DataCount {
@@ -129,28 +122,23 @@ export interface DataQueryParams {
 }
 
 // ========== MQTT 消息类型 ==========
-// TODO: 根据实际业务需求调整字段类型和命名，确保与 MQTT 消息格式一致
 
-export interface MQTTMessageBase {
-  Real_Time: string // 心跳时间, HH:mm:ss 格式
-}
-
-// 心跳消息 (heartbeat)
-export interface HeartbeatPayload extends MQTTMessageBase {
-  VID: string // 设备编号 (d_no)
-  online: string // "true" 或 "false"
-}
-
-// 数据信息 (data)
-export interface DataPayload extends MQTTMessageBase {
-  Tin: string
-  Tout: string
-  LXin: string
-  out_net?: 'true'
+// 数据信息 (data) —— 新数据结构
+export interface DataPayload {
+  id: string // 设备/数据源 id
+  time: string // 数据时间
+  wen_du1: string | number // 温度1
+  wen_du2: string | number // 温度2
+  jia_re: string | number // 加热开关状态
+  shui_beng: string | number // 水泵状态
+  liu_liang1: string | number // 流量总计
+  liu_liang2: string | number // 瞬时流量 L/min
+  ya_li: string | number // 水流压力
 }
 
 // 设备控制状态 (device_control)
-export interface DeviceControlPayload extends MQTTMessageBase {
+export interface DeviceControlPayload {
+  id: string // 设备/数据源 id
   Real_Time: string
   mode: string
   TinDL: string
@@ -163,46 +151,10 @@ export interface DeviceControlPayload extends MQTTMessageBase {
   SpeedM1: string
 }
 
-type DeviceControlPayloadOUTRefId =
-  | 'Real_Time'
-  | 'mode'
-  | 'TinDL'
-  | 'TinDH'
-  | 'LXD'
-  | 'HinD'
-  | 'light_status'
-  | 'Bright'
-  | 'fan_mode'
-  | 'SpeedM2'
-  | 'SpeedM1'
-  | 'fan_status'
-  | 'kongtiao_status'
-
-type DeviceControlPayloadOUT = {
-  [key in DeviceControlPayloadOUTRefId]?: string
-}
-
-// 设备状态信息 (device_status)
-export interface DeviceStatusPayload extends MQTTMessageBase {
-  gas: string
-  humi_over: string
-  fan_status: string
-  kongtiao_status: string
-}
-
-// 设备信息 (VID_PID)
-export interface VIDPIDInfo {
-  VID: string
-  PID: string
-}
-
 // MQTT 入
 interface MQTTMapper {
-  heartbeat: HeartbeatPayload
   data: DataPayload
   device_control: DeviceControlPayload
-  device_status: DeviceStatusPayload
-  VID_PID: VIDPIDInfo
 }
 
 export type MQTTTopic = keyof MQTTMapper
@@ -213,37 +165,24 @@ export interface MQTTMessage {
   payload: MQTTPayload<MQTTTopic>
 }
 
-// MQTT 出
-interface MQTTMapperOut {
-  'device_control/': DeviceControlPayloadOUT
-}
-
-export type MQTTTopicOut = keyof MQTTMapperOut
-export type MQTTPayloadOut<T extends MQTTTopicOut> = MQTTMapperOut[T]
-
-export interface MQTTMessageOut {
-  topic: MQTTTopicOut
-  d_no?: string
-  payload: MQTTPayloadOut<MQTTTopicOut>
-}
+// 控制指令（command.ts 新协议）
+export type ControlTarget = 'heat' | 'water'
+export type ControlAction = 'on' | 'off'
 
 // ========== WebSocket 推送事件类型 ==========
-export type WsEventType = 'data' | 'device_status' | 'device_status_sync' | 'alarm'
+export type WsEventType = 'data' | 'alarm'
 
-// WebSocket 传感器数据推送
+// WebSocket 传感器数据推送（新数据结构）
 export interface WsData {
   d_no: string
   timestamp: string
-  temp: string
-  humi: string
-  light: string
-}
-
-// WebSocket 设备状态推送
-export interface WsDeviceStatus {
-  d_no: string
-  online: string
-  timestamp: string
+  wen_du1: string
+  wen_du2: string
+  jia_re: string
+  shui_beng: string
+  liu_liang1: string
+  liu_liang2: string
+  ya_li: string
 }
 
 // WebSocket 告警推送
@@ -254,7 +193,7 @@ export interface WsAlarm {
   timestamp: string
 }
 
-export type WsMessageData = WsData | WsDeviceStatus | WsAlarm | WsDeviceStatus[]
+export type WsMessageData = WsData | WsAlarm
 
 export interface WsMessage {
   event: WsEventType

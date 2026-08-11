@@ -1,2 +1,2 @@
-export { useSensorData } from './useSensorData'
 export { useAlarmData } from './useAlarmData'
+export { useWebSocket } from './useWebSocket'

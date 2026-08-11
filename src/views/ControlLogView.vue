@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineOptions({ name: 'ControlLogView' })
 import { ref, computed, onMounted } from 'vue'
 import { ElPagination, ElButton } from 'element-plus'
 import DataTable from '../component/data/DataTable.vue'
@@ -6,7 +7,10 @@ import DataFilter from '../component/data/DataFilter.vue'
 import { getData, getDataMapper, getCount, getDataDevices } from '../server/api'
 import type { ColumnDef } from '../types/dataType'
 import type { FilterOption, FilterValue } from '../component/data/DataFilter.vue'
-import type { Data, FieldMapper, Where, WhereCondition } from '@/server/types'
+import type { Data, FieldMapper } from '@/server/types'
+
+// 控制记录查询表名
+const TABLE = 'control-log'
 
 // 原始数据状态
 const rawData = ref<Data[]>([])
@@ -50,9 +54,6 @@ function restoreStateFromUrl() {
   const size = Number(params.get('pageSize') || '10')
   currentPage.value = Number.isFinite(page) && page > 0 ? page : 1
   pageSize.value = Number.isFinite(size) && [10, 20, 50, 100].includes(size) ? size : 10
-
-  const where: Record<string, { value: string; operator: '=' }> = {}
-  whereClause.value = where
 }
 
 // 分页配置
@@ -72,7 +73,24 @@ const queryParams = computed(() => ({
 }))
 
 // 筛选条件
-const whereClause = ref<Where>({})
+const whereClause = ref<Record<string, { value: string; operator: '=' | '>' | '<' | '>=' | '<=' }>>(
+  {},
+)
+
+// 合并所有字段的 mapping 词表为全局映射（词条全局唯一复用）
+const globalMapper = computed<Record<string, string>>(() => {
+  const map: Record<string, string> = {}
+  for (const m of fieldMappers.value) {
+    if (m.mapping) {
+      try {
+        Object.assign(map, JSON.parse(m.mapping))
+      } catch {
+        // 忽略无效 mapping JSON
+      }
+    }
+  }
+  return map
+})
 
 // 列定义（从后端字段映射动态生成）
 const columns = computed<ColumnDef[]>(() => {
@@ -87,6 +105,8 @@ const columns = computed<ColumnDef[]>(() => {
     unitPlacement: 'header' as const,
     chartable: m.chartable === '1',
     sortable: true,
+    // 该字段声明了 mapping 词表 → 应用全局映射（值->显示名），默认不显示原始值备注
+    ...(m.mapping ? { mapper: globalMapper.value, showOriginal: false } : {}),
   }))
 })
 
@@ -104,8 +124,8 @@ async function loadData() {
   loading.value = true
   try {
     const [data, countResult] = await Promise.all([
-      getData('data', queryParams.value),
-      getCount('data', queryParams.value.where),
+      getData(TABLE, queryParams.value),
+      getCount(TABLE, queryParams.value.where),
     ])
     rawData.value = data
     totalCount.value = countResult.count
@@ -129,7 +149,7 @@ async function loadFilterOptions() {
 
 // 应用筛选
 function applyFilters(filters: Record<string, FilterValue>) {
-  const where: Where = {}
+  const where: Record<string, { value: string; operator: '=' | '>' | '<' | '>=' | '<=' }> = {}
   for (const [key, value] of Object.entries(filters)) {
     if (!value) continue
     const opt = filterOptions.value.find((o) => o.key === key)
@@ -143,7 +163,8 @@ function applyFilters(filters: Record<string, FilterValue>) {
       const pad = (n: number) => String(n).padStart(2, '0')
       const fmt = (d: Date) =>
         `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-      where[key] = [
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(where as any)[key] = [
         { value: fmt(new Date(s)), operator: '>=' },
         { value: fmt(new Date(e)), operator: '<=' },
       ]
@@ -151,11 +172,12 @@ function applyFilters(filters: Record<string, FilterValue>) {
     // 数值范围
     if (opt?.type === 'range') {
       const [min, max] = value as [number, number]
-      const conds: WhereCondition[] = []
+      const conds: { value: string; operator: '>=' | '<=' }[] = []
       if (min !== -Infinity) conds.push({ value: String(min), operator: '>=' })
       if (max !== Infinity) conds.push({ value: String(max), operator: '<=' })
       if (conds.length) {
-        where[key] = conds.length === 1 ? (conds[0] as WhereCondition) : conds
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(where as any)[key] = conds.length === 1 ? conds[0] : conds
       }
     }
   }
@@ -191,21 +213,17 @@ function onSortChange(info: { prop: string; order: 'ascending' | 'descending' | 
 // 初始化
 onMounted(async () => {
   restoreStateFromUrl()
-  fieldMappers.value = await getDataMapper('data')
+  fieldMappers.value = await getDataMapper(TABLE)
   await loadFilterOptions()
   await loadData()
   syncStateToUrl()
 })
-
-function identify() {
-  // TODO: 识别的实现
-}
 </script>
 
 <template>
   <div class="data-view">
     <div class="header-section">
-      <h3>传感器数据总览</h3>
+      <h3>控制命令记录</h3>
       <span class="count-tip">
         共 {{ totalCount }} 条
         <span v-if="loading" class="loading-text">(加载中...)</span>
@@ -215,10 +233,10 @@ function identify() {
     <!-- 筛选器 -->
     <div class="filter-section">
       <DataFilter v-model="filterValue" :options="filterOptions" @change="applyFilters" />
-      <ElButton @click="identify">识别</ElButton>
+      <ElButton @click="loadData">刷新</ElButton>
     </div>
 
-    <!-- 上半：表格 -->
+    <!-- 表格 -->
     <div class="table-section" v-loading="loading">
       <DataTable
         :data="rawData"
@@ -280,7 +298,6 @@ function identify() {
   display: flex;
   align-items: center;
   gap: 12px;
-  /* flex-wrap: wrap; */
   position: relative;
   z-index: 3;
 }
@@ -300,62 +317,5 @@ function identify() {
   border: 1px solid #e4e7ed;
   position: relative;
   z-index: 1;
-}
-
-.chart-section {
-  flex: 1;
-  min-height: 200px;
-  border-radius: 6px;
-  border: 1px solid #ebeef5;
-  overflow: hidden;
-}
-
-/* 手机端适配 */
-@media (max-width: 767px) {
-  .data-view {
-    gap: 8px;
-    padding: 8px;
-  }
-
-  .header-section {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-
-  .header-section h3 {
-    font-size: 16px;
-  }
-
-  .count-tip {
-    font-size: 12px;
-  }
-
-  .filter-section {
-    width: 100%;
-  }
-
-  .table-section,
-  .chart-section {
-    border-radius: 4px;
-    min-height: 150px;
-  }
-
-  .pagination-section {
-    padding: 4px 0;
-  }
-
-  /* 分页组件移动端简化 */
-  .pagination-section :deep(.el-pagination) {
-    justify-content: center;
-  }
-
-  .pagination-section :deep(.el-pagination__sizes) {
-    display: none;
-  }
-
-  .pagination-section :deep(.el-pagination__total) {
-    font-size: 12px;
-  }
 }
 </style>

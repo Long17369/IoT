@@ -3,55 +3,30 @@ defineOptions({ name: 'HomePage' })
 import { ref, computed, onMounted } from 'vue'
 import { ElSelect, ElOption } from 'element-plus'
 import StatusCard from '@/component/dashboard/StatusCard.vue'
-import DeviceStatusTag from '@/component/dashboard/DeviceStatusTag.vue'
 import AlarmBanner from '@/component/alarm/AlarmBanner.vue'
-import { getDevice } from '@/server/api'
+import { getDataDevices } from '@/server/api'
 import { useWebSocket } from '@/composables/useWebSocket'
-import type { Device } from '@/server/types'
 
-const { getDeviceSensorData, getDeviceOnline, alarms, clearAlarms } = useWebSocket()
+const { getDeviceSensorData, alarms, clearAlarms } = useWebSocket()
 
-const devices = ref<Device[]>([])
+const devices = ref<string[]>([])
 const selectedDevice = ref('')
 
 onMounted(async () => {
   try {
-    devices.value = await getDevice()
+    devices.value = await getDataDevices()
     if (devices.value.length > 0) {
-      selectedDevice.value = devices.value[0]?.device_name ?? ''
+      selectedDevice.value = devices.value[0] ?? ''
     }
   } catch (e) {
     console.error('获取设备列表失败:', e)
   }
 })
 
-const currentDevice = computed(() => devices.value.find((d) => d.device_name === selectedDevice.value))
-
 const sensorData = computed(() => {
   if (!selectedDevice.value) return undefined
   return getDeviceSensorData(selectedDevice.value)
 })
-
-const deviceOnline = computed(() => {
-  if (!selectedDevice.value) return false
-  return getDeviceOnline(selectedDevice.value)
-})
-
-function tempStatus(value: string): 'normal' | 'warning' | 'danger' {
-  const v = parseFloat(value)
-  if (isNaN(v)) return 'normal'
-  if (v > 30 || v < 0) return 'danger'
-  if (v > 25 || v < 5) return 'warning'
-  return 'normal'
-}
-
-function humiStatus(value: string): 'normal' | 'warning' | 'danger' {
-  const v = parseFloat(value)
-  if (isNaN(v)) return 'normal'
-  if (v > 90 || v < 20) return 'danger'
-  if (v > 80 || v < 30) return 'warning'
-  return 'normal'
-}
 </script>
 
 <template>
@@ -70,68 +45,23 @@ function humiStatus(value: string): 'normal' | 'warning' | 'danger' {
           size="default"
           style="width: 200px"
         >
-          <ElOption
-            v-for="d in devices"
-            :key="d.number"
-            :label="`${d.device_name} (${d.number})`"
-            :value="d.number"
-          />
+          <ElOption v-for="d in devices" :key="d" :label="d" :value="d" />
         </ElSelect>
       </div>
     </div>
 
-    <!-- 设备状态标签列表 -->
-    <div class="device-list">
-      <DeviceStatusTag
-        v-for="d in devices"
-        :key="d.number"
-        :online="getDeviceOnline(d.device_name)"
-        :device-name="d.device_name"
-        :device-number="d.number"
-      />
-      <div v-if="devices.length === 0" class="empty-hint">暂无设备，请先添加设备</div>
-    </div>
-
     <!-- 传感器数据卡片 -->
     <div class="sensor-grid">
-      <StatusCard
-        title="温度(内)"
-        :value="sensorData?.temp ?? '--'"
-        unit="°C"
-        :status="sensorData ? tempStatus(sensorData.temp) : 'normal'"
-        :trend="'stable'"
-      />
-      <StatusCard
-        title="温度(外)"
-        :value="sensorData?.humi ?? '--'"
-        unit="%"
-        :status="sensorData ? humiStatus(sensorData.humi) : 'normal'"
-        :trend="'stable'"
-      />
-      <StatusCard
-        title="光照"
-        :value="sensorData?.light ?? '--'"
-        unit="lux"
-        :status="'normal'"
-        :trend="'stable'"
-      />
+      <StatusCard title="温度1" :value="sensorData?.wen_du1 ?? '--'" unit="°C" />
+      <StatusCard title="温度2" :value="sensorData?.wen_du2 ?? '--'" unit="°C" />
+      <StatusCard title="瞬时流量" :value="sensorData?.liu_liang2 ?? '--'" unit="L/min" />
     </div>
 
     <!-- 当前设备信息 -->
-    <div v-if="currentDevice" class="device-detail">
-      <div class="detail-card">
-        <span class="detail-label">设备名称</span>
-        <span class="detail-value">{{ currentDevice.device_name }}</span>
-      </div>
+    <div v-if="selectedDevice" class="device-detail">
       <div class="detail-card">
         <span class="detail-label">设备编号</span>
-        <span class="detail-value">{{ currentDevice.number }}</span>
-      </div>
-      <div class="detail-card">
-        <span class="detail-label">在线状态</span>
-        <span class="detail-value" :class="deviceOnline ? 'online' : 'offline'">
-          {{ deviceOnline ? '在线' : '离线' }}
-        </span>
+        <span class="detail-value">{{ selectedDevice }}</span>
       </div>
       <div class="detail-card">
         <span class="detail-label">数据更新时间</span>

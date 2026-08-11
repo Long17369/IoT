@@ -1,27 +1,28 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElSelect, ElOption } from 'element-plus'
-import { Setting, Monitor } from '@element-plus/icons-vue'
-import StatusCard from '@/component/dashboard/StatusCard.vue'
-import DeviceStatusTag from '@/component/dashboard/DeviceStatusTag.vue'
+import { Setting } from '@element-plus/icons-vue'
 import ControlPanel from '@/component/control/ControlPanel.vue'
-import { getDevice, fetchDirectConfig, fetchDirectData } from '@/server/api'
-import { useWebSocket } from '@/composables/useWebSocket'
-import type { Device, DirectConfig, Direct } from '@/server/types'
+import {
+  getDataDevices,
+  fetchDirectConfig,
+  fetchDirectData,
+  sendControlCommand,
+} from '@/server/api'
+import type { DirectConfig, Direct, ControlTarget, ControlAction } from '@/server/types'
 
-const { getDeviceSensorData, getDeviceOnline } = useWebSocket()
-
-const devices = ref<Device[]>([])
+const devices = ref<string[]>([])
 const selectedDevice = ref('')
 const configs = ref<DirectConfig[]>([])
 const directValues = ref<Direct[]>([])
 const loading = ref(false)
+const sending = ref(false)
 
 onMounted(async () => {
   try {
-    devices.value = await getDevice()
+    devices.value = await getDataDevices()
     if (devices.value.length > 0) {
-      selectedDevice.value = devices.value[0]?.device_name || devices.value[0]?.number || ''
+      selectedDevice.value = devices.value[0] ?? ''
       await loadDeviceConfig()
     }
   } catch (e) {
@@ -50,19 +51,18 @@ async function onDeviceChange() {
   await loadDeviceConfig()
 }
 
-const currentDevice = computed(() =>
-  devices.value.find((d) => (d.number || d.device_name) === selectedDevice.value),
-)
-
-const sensorData = computed(() => {
-  if (!selectedDevice.value) return undefined
-  return getDeviceSensorData(selectedDevice.value)
-})
-
-const deviceOnline = computed(() => {
-  if (!selectedDevice.value) return false
-  return getDeviceOnline(selectedDevice.value)
-})
+async function sendCommand(target: ControlTarget, action: ControlAction) {
+  sending.value = true
+  try {
+    if (!selectedDevice.value) return
+    await sendControlCommand(target, action, selectedDevice.value)
+    console.log(`控制指令已下发: ${target}.${action}`)
+  } catch (e) {
+    console.error('下发控制指令失败:', e)
+  } finally {
+    sending.value = false
+  }
+}
 
 async function onControlUpdated() {
   // 控制指令下发后，刷新指令值和配置（ref_id 过滤可能变化）
@@ -96,12 +96,7 @@ async function onControlUpdated() {
           style="width: 200px"
           @change="onDeviceChange"
         >
-          <ElOption
-            v-for="d in devices"
-            :key="d.number || d.device_name"
-            :label="`${d.device_name} (${d.number || d.device_name})`"
-            :value="d.number || d.device_name"
-          />
+          <ElOption v-for="d in devices" :key="d" :label="d" :value="d" />
         </ElSelect>
       </div>
     </div>
@@ -109,56 +104,36 @@ async function onControlUpdated() {
     <div v-if="!selectedDevice" class="empty-hint">请先选择要控制的设备</div>
 
     <template v-else>
-      <!-- 设备状态 -->
-      <DeviceStatusTag
-        :online="deviceOnline"
-        :device-name="currentDevice?.device_name ?? ''"
-        :device-number="currentDevice?.number ?? ''"
-      />
-
-      <!-- 主内容区：左右布局 -->
-      <div class="control-layout">
-        <!-- 左侧：传感器实时读数 -->
-        <div class="sensor-panel">
-          <h3>
-            <el-icon><Monitor /></el-icon>
-            实时读数
-          </h3>
-          <div class="sensor-readings">
-            <StatusCard
-              title="温度(内)"
-              :value="sensorData?.temp ?? '--'"
-              unit="°C"
-              :status="'normal'"
-            />
-            <StatusCard
-              title="温度(外)"
-              :value="sensorData?.humi ?? '--'"
-              unit="%"
-              :status="'normal'"
-            />
-            <StatusCard
-              title="光照"
-              :value="sensorData?.light ?? '--'"
-              unit="lux"
-              :status="'normal'"
-            />
-          </div>
+      <!-- 快捷控制（command.ts 新协议） -->
+      <div class="quick-control">
+        <h3>快捷控制</h3>
+        <div class="quick-btns">
+          <el-button type="warning" :disabled="sending" @click="sendCommand('heat', 'on')">
+            加热开
+          </el-button>
+          <el-button type="info" :disabled="sending" @click="sendCommand('heat', 'off')">
+            加热关
+          </el-button>
+          <el-button type="primary" :disabled="sending" @click="sendCommand('water', 'on')">
+            水泵开
+          </el-button>
+          <el-button type="danger" :disabled="sending" @click="sendCommand('water', 'off')">
+            水泵关
+          </el-button>
         </div>
+      </div>
 
-        <!-- 右侧：控制面板 -->
-        <div class="control-panel-wrapper">
-          <h3>控制面板</h3>
-          <div v-if="loading" class="loading-hint">加载中...</div>
-          <ControlPanel
-            v-else
-            :configs="configs"
-            :direct-values="directValues"
-            :d-no="selectedDevice"
-            :disabled="false"
-            @updated="onControlUpdated"
-          />
-        </div>
+      <div class="control-panel-wrapper">
+        <h3>控制面板（参数配置）</h3>
+        <div v-if="loading" class="loading-hint">加载中...</div>
+        <ControlPanel
+          v-else
+          :configs="configs"
+          :direct-values="directValues"
+          :d-no="selectedDevice"
+          :disabled="false"
+          @updated="onControlUpdated"
+        />
       </div>
     </template>
   </div>

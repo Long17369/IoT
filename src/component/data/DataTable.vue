@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { ElTable, ElTableColumn, ElTag } from 'element-plus'
 import type { ColumnDef, SortInfo } from '../../types/dataType'
 
@@ -7,10 +7,14 @@ const props = defineProps<{
   /** 要展示的数据（已由上层切片） */
   data: Record<string, unknown>[]
   columns: ColumnDef[]
+  /** 是否启用行选择（在首列渲染 checkbox），默认 false */
+  selectable?: boolean
 }>()
 
 const emit = defineEmits<{
   'sort-change': [info: SortInfo]
+  /** 行选择变化时触发，payload 为当前选中的行数组 */
+  'selection-change': [rows: Record<string, unknown>[]]
 }>()
 
 /** 表头标签（unitPlacement=header 或 both 时带单位，cell 时不带） */
@@ -18,6 +22,15 @@ function headerLabel(col: ColumnDef): string {
   if (!col.unit) return col.label
   if (col.unitPlacement === 'cell') return col.label
   return `${col.label} (${col.unit})`
+}
+
+/** ElTable 实例引用，用于外部调用 clearSelection 等方法 */
+const tableRef = ref<InstanceType<typeof ElTable>>()
+
+/** 多选变化回调 */
+function onSelectionChange(rows: Record<string, unknown>[]) {
+  console.log('DataTable selection-change', rows)
+  emit('selection-change', rows)
 }
 
 /** 格式化时间字段：ISO/UTC → 本地可读格式 */
@@ -34,6 +47,14 @@ function cellText(row: Record<string, unknown>, col: ColumnDef): string {
   const val = row[col.key]
   // 时间字段格式化
   if (col.key === 'c_time') return formatTime(val)
+  // 值映射（由字段映射 mapper 驱动）
+  if (col.mapper) {
+    const key = String(val)
+    const mapped = col.mapper[key]
+    if (mapped !== undefined) {
+      return col.showOriginal ? `${mapped} (${key})` : mapped
+    }
+  }
   if (!col.unit || col.unitPlacement === 'header') return String(val ?? '')
   return `${val ?? ''}${col.unit}`
 }
@@ -73,10 +94,25 @@ function onSortChange(sort: { prop: string; order: string | null }) {
     order: (sort.order as SortInfo['order']) ?? null,
   })
 }
+
+/** 清空选中行（可通过 defineExpose 暴露给父组件） */
+function clearSelection() {
+  tableRef.value?.clearSelection()
+}
+
+defineExpose({ clearSelection, tableRef })
 </script>
 
 <template>
-  <ElTable :data="data" stripe border @sort-change="onSortChange">
+  <ElTable
+    ref="tableRef"
+    :data="data"
+    stripe
+    border
+    @sort-change="onSortChange"
+    @selection-change="onSelectionChange"
+  >
+    <ElTableColumn v-if="selectable" type="selection" width="45" align="center" />
     <ElTableColumn
       v-for="col in columns"
       :key="col.key"
@@ -95,27 +131,3 @@ function onSortChange(sort: { prop: string; order: string | null }) {
     </ElTableColumn>
   </ElTable>
 </template>
-
-<style scoped>
-/* 移动端表格优化 */
-@media (max-width: 767px) {
-  :deep(.el-table) {
-    font-size: 12px;
-  }
-
-  :deep(.el-table__header th) {
-    padding: 8px 4px !important;
-  }
-
-  :deep(.el-table__cell) {
-    padding: 6px 4px !important;
-  }
-
-  :deep(.el-tag) {
-    font-size: 11px;
-    padding: 0 4px;
-    height: 20px;
-    line-height: 18px;
-  }
-}
-</style>

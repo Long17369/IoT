@@ -34,22 +34,10 @@ const router = createRouter({
       meta: { title: '故障历史' },
     },
     {
-      path: '/services/web-dev',
-      name: 'WebDev',
-      component: () => import('@/views/WebDev.vue'),
-      meta: { title: 'Web 远程终端' },
-    },
-    {
-      path: '/services/mobile-dev',
-      name: 'MobileDev',
-      component: () => import('@/views/MobileDev.vue'),
-      meta: { title: '移动端终端' },
-    },
-    {
-      path: '/services/local-display',
-      name: 'LocalDeviceDisplay',
-      component: () => import('@/views/LocalDeviceDisplay.vue'),
-      meta: { title: '本地设备显示' },
+      path: '/data/control-log',
+      name: 'ControlLog',
+      component: () => import('@/views/ControlLogView.vue'),
+      meta: { title: '控制命令记录' },
     },
   ],
 })

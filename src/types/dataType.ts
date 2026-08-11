@@ -12,6 +12,10 @@ export interface ColumnDef {
   chartable?: boolean
   /** 是否可排序，默认 false */
   sortable?: boolean
+  /** 值映射词表：值 -> 显示名（由字段映射 mapper 驱动） */
+  mapper?: Record<string, string>
+  /** 映射命中时是否以 "(原始值)" 备注显示，默认 false */
+  showOriginal?: boolean
 }
 
 /** 排序信息，由 DataTable emit 给上层做排序逻辑 */

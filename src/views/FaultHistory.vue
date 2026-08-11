@@ -4,6 +4,7 @@ import { ElPagination } from 'element-plus'
 import DataTable from '../component/data/DataTable.vue'
 import DataFilter from '../component/data/DataFilter.vue'
 import { useAlarmData } from '../composables/useAlarmData'
+import { getDataDevices } from '../server/api'
 import type { ColumnDef } from '../types/dataType'
 import type { FilterOption, FilterValue } from '../component/data/DataFilter.vue'
 import type { Where } from '@/server/types'
@@ -20,16 +21,6 @@ const {
   fetchCount,
 } = useAlarmData()
 
-// 移动端检测
-const windowWidth = ref(window.innerWidth)
-const isMobile = computed(() => windowWidth.value < 768)
-
-onMounted(() => {
-  window.addEventListener('resize', () => {
-    windowWidth.value = window.innerWidth
-  })
-})
-
 // 分页
 const pageSize = ref(10)
 
@@ -38,50 +29,28 @@ const whereClause = ref<Where>({})
 
 // 从 FieldMapper 生成列（全为 FieldMapper 驱动）
 const columns = computed<ColumnDef[]>(() => {
-  const baseColumns: ColumnDef[] = [
-    { key: 'id', label: 'ID', chartable: false, sortable: true },
-    { key: 'd_no', label: '设备编号', chartable: false, sortable: true },
-    { key: 'c_time', label: '故障时间', chartable: false, sortable: true },
-  ]
-
   const sortedMappers = fieldMappers.value
     .filter((m) => m.visible === '1')
     .sort((a, b) => a.id - b.id)
 
-  const mapperColumns: ColumnDef[] = sortedMappers.map((m) => ({
+  return sortedMappers.map((m) => ({
     key: m.db_name,
     label: m.f_name,
     unit: m.unit || undefined,
     unitPlacement: 'header' as const,
-    chartable: false,
+    chartable: m.chartable === '1',
     sortable: true,
   }))
-
-  return [...baseColumns, ...mapperColumns]
 })
 
-// 从 FieldMapper 生成筛选选项
-const filterOptions = computed<FilterOption[]>(() => {
-  const opts: FilterOption[] = [
-    {
-      key: 'd_no',
-      label: '设备编号',
-      values: [],
-    },
-  ]
+// 筛选选项：设备编号 + 时间范围
+const filterOptions = computed<FilterOption[]>(() => [
+  { key: 'd_no', label: '设备编号', type: 'select', values: deviceOptions.value },
+  { key: 'c_time', label: '时间范围', type: 'datetimerange' },
+])
 
-  const sorted = fieldMappers.value.filter((m) => m.visible === '1').sort((a, b) => a.id - b.id)
-
-  for (const m of sorted) {
-    opts.push({
-      key: m.db_name,
-      label: m.f_name,
-      values: [], // 从数据中动态提取
-    })
-  }
-
-  return opts
-})
+// 设备选项（用于 d_no 下拉）
+const deviceOptions = ref<string[]>([])
 
 // 筛选器状态
 const filterValue = ref<Record<string, FilterValue>>({})
@@ -109,13 +78,22 @@ async function loadData() {
 function applyFilters() {
   const where: Where = {}
   for (const [key, value] of Object.entries(filterValue.value)) {
-    if (value) {
-      const val = Array.isArray(value)
-        ? value[0] instanceof Date
-          ? value[0].toISOString().slice(0, 19).replace('T', ' ')
-          : String(value[0])
-        : value
-      if (val) where[key] = { value: val, operator: '=' }
+    if (!value) continue
+    const opt = filterOptions.value.find((o) => o.key === key)
+    // select（默认）
+    if (!opt?.type || opt.type === 'select') {
+      where[key] = { value: String(value), operator: '=' }
+    }
+    // 时间范围
+    if (opt?.type === 'datetimerange') {
+      const [s, e] = value as [Date, Date]
+      const pad = (n: number) => String(n).padStart(2, '0')
+      const fmt = (d: Date) =>
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+      where[key] = [
+        { value: fmt(new Date(s)), operator: '>=' },
+        { value: fmt(new Date(e)), operator: '<=' },
+      ]
     }
   }
   whereClause.value = where
@@ -135,9 +113,19 @@ function onSizeChange(size: number) {
   loadData()
 }
 
+// 加载设备选项
+async function loadDeviceOptions() {
+  try {
+    deviceOptions.value = await getDataDevices()
+  } catch {
+    // 忽略加载失败
+  }
+}
+
 // 初始化
 onMounted(async () => {
   await fetchFieldMappers()
+  await loadDeviceOptions()
   await loadData()
 })
 </script>
@@ -166,7 +154,6 @@ onMounted(async () => {
         v-model:page-size="pageSize"
         :total="totalCount"
         :page-sizes="[10, 20, 50, 100]"
-        :size="isMobile ? 'small' : 'default'"
         layout="total, sizes, prev, pager, next"
         @current-change="onPageChange"
         @size-change="onSizeChange"

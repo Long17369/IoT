@@ -6,12 +6,14 @@ interface Props {
   modelValue: number
   min?: number
   max?: number
+  step?: number
   unit?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   min: 0,
   max: 100,
+  step: 1,
   unit: '',
 })
 
@@ -38,6 +40,7 @@ function handleChange(value: number) {
       :model-value="modelValue"
       :min="min"
       :max="max"
+      :step="step"
       :show-tooltip="false"
       @update:model-value="
         (val: number | number[]) => handleChange(Array.isArray(val) ? (val[0] ?? 0) : val)

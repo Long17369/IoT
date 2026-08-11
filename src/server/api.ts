@@ -12,6 +12,8 @@ import type {
   FetchOptions,
   FrontendDataQueryParams,
   Where,
+  ControlTarget,
+  ControlAction,
 } from './types'
 
 const BASE_URL = '/api'
@@ -96,6 +98,13 @@ export const getDevice = (params?: { device_name?: string; number?: string }) =>
 }
 
 /**
+ * 获取有数据上报的设备编号（d_no 列表，用于设备选择/筛选）
+ */
+export const getDataDevices = () => {
+  return fetchApi<string[]>(`${BASE_URL}/data/devices`)
+}
+
+/**
  * 新增设备
  * @param device 设备信息
  */
@@ -155,5 +164,19 @@ export const updateDirectData = (data: UpdateDirectParams) => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
+  })
+}
+
+/**
+ * 下发服务端控制指令（command.ts 新协议）
+ * @param target 控制目标: heat(加热) | water(水泵)
+ * @param action 动作: on | off
+ * @param d_no 设备编号（控制目标设备）
+ */
+export const sendControlCommand = (target: ControlTarget, action: ControlAction, d_no: string) => {
+  return fetchApi<{ message: string }>(`${BASE_URL}/control`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target, action, d_no }),
   })
 }

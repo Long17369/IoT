@@ -24,7 +24,7 @@ const emit = defineEmits<{
       </div>
     </div>
     <div class="header-actions">
-      <span class="user-info">管理员</span>
+      <!-- <span class="user-info">管理员</span> -->
     </div>
   </div>
 </template>

@@ -1,9 +1,10 @@
 import { ref, shallowRef } from 'vue'
-import type { WsData, WsDeviceStatus, WsAlarm, WsMessage } from '@/server/types'
+import type { WsData, WsAlarm, WsMessage } from '@/server/types'
 
 /**
  * WebSocket 单例连接管理器
  * 全局只有一个 WebSocket 连接，多组件共享
+ * 仅推送数据(data)与告警(alarm)
  */
 
 // 开发环境通过 Vite proxy 代理到后端，生产环境直连
@@ -14,7 +15,6 @@ const WS_URL =
 
 const connected = ref(false)
 const latestSensorData = shallowRef<Map<string, WsData>>(new Map())
-const deviceStatuses = shallowRef<Map<string, WsDeviceStatus>>(new Map())
 const alarms = ref<WsAlarm[]>([])
 
 let ws: WebSocket | null = null
@@ -76,24 +76,6 @@ function handleMessage(msg: WsMessage) {
       latestSensorData.value = newMap
       break
     }
-    case 'device_status': {
-      const data = msg.data as WsDeviceStatus
-      const newMap = new Map(deviceStatuses.value)
-      newMap.set(data.d_no, data)
-      deviceStatuses.value = newMap
-      break
-    }
-    case 'device_status_sync': {
-      // 后端推送全量设备状态（权威来源），直接替换
-      const list = msg.data as WsDeviceStatus[]
-      const newMap = new Map<string, WsDeviceStatus>()
-      for (const item of list) {
-        newMap.set(item.d_no, item)
-      }
-      deviceStatuses.value = newMap
-      console.log('[WebSocket] 设备状态同步:', list.length, '个设备')
-      break
-    }
     case 'alarm': {
       const data = msg.data as WsAlarm
       alarms.value = [data, ...alarms.value].slice(0, 50)
@@ -114,12 +96,6 @@ export function useWebSocket() {
     return latestSensorData.value.get(d_no)
   }
 
-  function getDeviceOnline(d_no: string): boolean {
-    const status = deviceStatuses.value.get(d_no)
-    if (!status) return false
-    return status.online === 'true'
-  }
-
   function clearAlarms() {
     alarms.value = []
   }
@@ -127,10 +103,8 @@ export function useWebSocket() {
   return {
     connected,
     latestSensorData,
-    deviceStatuses,
     alarms,
     getDeviceSensorData,
-    getDeviceOnline,
     clearAlarms,
   }
 }

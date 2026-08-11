@@ -1,22 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElAside, ElContainer, ElFooter, ElHeader, ElMain, ElMenu } from 'element-plus'
 import {
-  InfoFilled,
-  PhoneFilled,
-  Service,
-  Monitor,
-  Iphone,
   Expand,
   Fold,
   DataBoard,
   DataAnalysis,
   TrendCharts,
   Warning,
-  Bell,
   Setting,
   Odometer,
+  Operation,
 } from '@element-plus/icons-vue'
 import { ElIcon } from 'element-plus'
 import HeaderCom from './component/HeaderCom.vue'
@@ -52,6 +47,12 @@ const menuItems: MenuList = [
         type: 'item',
         icon: Warning,
       },
+      {
+        index: '/data/control-log',
+        label: '控制记录',
+        type: 'item',
+        icon: Operation,
+      },
     ],
   },
   {
@@ -60,45 +61,9 @@ const menuItems: MenuList = [
     type: 'item',
     icon: Setting,
   },
-  {
-    index: '/services',
-    label: '终端监控',
-    type: 'submenu',
-    icon: Service,
-    children: [
-      {
-        index: '/services/web-dev',
-        label: 'Web 远程终端',
-        type: 'item',
-        icon: Monitor,
-      },
-      {
-        index: '/services/mobile-dev',
-        label: '移动端终端',
-        type: 'item',
-        icon: Iphone,
-      },
-      {
-        index: '/services/local-display',
-        label: '本地设备显示',
-        type: 'item',
-        icon: Bell,
-      },
-    ],
-  },
 ]
 
-const MOBILE_BREAKPOINT = 768
-
-const isCollapse = ref(window.innerWidth < MOBILE_BREAKPOINT)
-const isMobile = ref(window.innerWidth < MOBILE_BREAKPOINT)
-
-function updateMobile() {
-  isMobile.value = window.innerWidth < MOBILE_BREAKPOINT
-  if (isMobile.value) {
-    isCollapse.value = true
-  }
-}
+const isCollapse = ref(false)
 
 function toggleSidebar() {
   isCollapse.value = !isCollapse.value
@@ -108,28 +73,9 @@ function toggleSidebar() {
 function onSelect(index: string) {
   activeIndex.value = index
   router.push(index)
-  if (isMobile.value) {
-    isCollapse.value = true
-  }
-}
-
-// 点击遮罩层关闭侧栏
-function closeSidebar() {
-  if (isMobile.value) {
-    isCollapse.value = true
-  }
 }
 
 const activeIndex = ref(route.path)
-
-onMounted(() => {
-  window.addEventListener('resize', updateMobile)
-  updateMobile()
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', updateMobile)
-})
 </script>
 
 <template>
@@ -138,15 +84,11 @@ onUnmounted(() => {
       <HeaderCom :collapsed="isCollapse" @toggle="toggleSidebar" />
     </ElHeader>
     <ElContainer direction="horizontal" class="main-container">
-      <!-- 移动端遮罩 -->
-      <div v-if="isMobile && !isCollapse" class="sidebar-overlay" @click="closeSidebar" />
       <ElAside
         :width="isCollapse ? '64px' : '220px'"
         class="aside-transition"
         :class="{
           'aside-collapsed': isCollapse,
-          'aside-mobile': isMobile,
-          'aside-mobile-open': isMobile && !isCollapse,
         }"
       >
         <!-- 桌面端：侧边栏顶部折叠按钮 -->
@@ -295,34 +237,5 @@ body {
   text-align: center;
   color: #909399;
   font-size: 13px;
-}
-
-/* ===== 手机端适配 ===== */
-@media (max-width: 767px) {
-  .aside-toggle {
-    display: none;
-  }
-  .aside-mobile {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 100;
-    transform: translateX(-100%);
-    transition:
-      transform 0.3s ease,
-      width 0.3s ease;
-  }
-
-  .aside-mobile-open {
-    transform: translateX(0);
-  }
-
-  .sidebar-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 99;
-    background: rgba(0, 0, 0, 0.35);
-  }
 }
 </style>
