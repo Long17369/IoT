@@ -180,3 +180,15 @@ export const sendControlCommand = (target: ControlTarget, action: ControlAction,
     body: JSON.stringify({ target, action, d_no }),
   })
 }
+
+/**
+ * 手动复位设备堵塞状态（清除持久化 blocked 标记 + block 预警记录）
+ * @param d_no 设备编号
+ */
+export const resetDeviceBlock = (d_no: string) => {
+  return fetchApi<{ message: string }>(`${BASE_URL}/control/reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ d_no }),
+  })
+}

@@ -78,6 +78,13 @@ function handleMessage(msg: WsMessage) {
     }
     case 'alarm': {
       const data = msg.data as WsAlarm
+      // 复位事件：清除该设备所有实时预警横幅
+      if (data.type === 'reset') {
+        clearDeviceAlarms(data.d_no)
+        return
+      }
+      // 重连去重：同 id（补推/重复推送）不重复添加
+      if (data.id && alarms.value.some((a) => a.id === data.id)) return
       alarms.value = [data, ...alarms.value].slice(0, 50)
       break
     }
@@ -100,11 +107,17 @@ export function useWebSocket() {
     alarms.value = []
   }
 
+  /** 清除指定设备的所有预警横幅 */
+  function clearDeviceAlarms(d_no: string) {
+    alarms.value = alarms.value.filter((a) => a.d_no !== d_no)
+  }
+
   return {
     connected,
     latestSensorData,
     alarms,
     getDeviceSensorData,
     clearAlarms,
+    clearDeviceAlarms,
   }
 }

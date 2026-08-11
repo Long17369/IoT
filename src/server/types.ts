@@ -187,6 +187,7 @@ export interface WsData {
 
 // WebSocket 告警推送
 export interface WsAlarm {
+  id: string // 预警唯一 ID（基于发生时间生成，用于重连去重）
   d_no: string
   type: string // 'alarm' | 'error'
   message: string

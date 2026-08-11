@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElSelect, ElOption } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 import ControlPanel from '@/component/control/ControlPanel.vue'
@@ -8,8 +8,12 @@ import {
   fetchDirectConfig,
   fetchDirectData,
   sendControlCommand,
+  resetDeviceBlock,
 } from '@/server/api'
+import { useWebSocket } from '@/composables/useWebSocket'
 import type { DirectConfig, Direct, ControlTarget, ControlAction } from '@/server/types'
+
+const { clearDeviceAlarms } = useWebSocket()
 
 const devices = ref<string[]>([])
 const selectedDevice = ref('')
@@ -17,6 +21,11 @@ const configs = ref<DirectConfig[]>([])
 const directValues = ref<Direct[]>([])
 const loading = ref(false)
 const sending = ref(false)
+
+/** 设备是否处于堵塞状态（t_direct 存在 blocked=1） */
+const isBlocked = computed(() =>
+  directValues.value.some((d) => d.config_id === 'blocked' && d.value === '1'),
+)
 
 onMounted(async () => {
   try {
@@ -59,6 +68,22 @@ async function sendCommand(target: ControlTarget, action: ControlAction) {
     console.log(`控制指令已下发: ${target}.${action}`)
   } catch (e) {
     console.error('下发控制指令失败:', e)
+  } finally {
+    sending.value = false
+  }
+}
+
+/** 手动复位堵塞状态：清除持久化标记 + 本地预警横幅 + 刷新面板 */
+async function onResetBlock() {
+  if (!selectedDevice.value) return
+  sending.value = true
+  try {
+    await resetDeviceBlock(selectedDevice.value)
+    clearDeviceAlarms(selectedDevice.value) // 本地兜底清除横幅（WS reset 也会触发）
+    await onControlUpdated() // 刷新后 blocked 变 '0'，复位按钮消失
+    console.log('堵塞状态已复位:', selectedDevice.value)
+  } catch (e) {
+    console.error('复位堵塞状态失败:', e)
   } finally {
     sending.value = false
   }
@@ -119,6 +144,10 @@ async function onControlUpdated() {
           </el-button>
           <el-button type="danger" :disabled="sending" @click="sendCommand('water', 'off')">
             水泵关
+          </el-button>
+          <!-- 手动复位：仅设备堵塞时显示，清除堵塞状态与预警 -->
+          <el-button v-if="isBlocked" type="success" :disabled="sending" @click="onResetBlock">
+            复位
           </el-button>
         </div>
       </div>
