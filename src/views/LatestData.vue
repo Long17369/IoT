@@ -4,23 +4,36 @@ import { Watch, TrendCharts } from '@element-plus/icons-vue'
 import { ElIcon, ElSelect, ElOption } from 'element-plus'
 import DataCard from '../component/data/DataCard.vue'
 import DataChart from '../component/data/DataChart.vue'
-import { getData, getDataMapper, getDataDevices } from '@/server/api'
+import { getDataMapper, getDataDevices } from '@/server/api'
 import { useWebSocket } from '@/composables/useWebSocket'
-import type { Data, FieldMapper, Where } from '@/server/types'
+import type { Data, FieldMapper, WsData } from '@/server/types'
 import type { CardField, ColumnDef } from '@/types/dataType'
 
-const latestRecord = ref<Data | null>(null)
-const recentRecords = ref<Data[]>([])
 const fieldMappers = ref<FieldMapper[]>([])
-const loading = ref(false)
-const error = ref<string | null>(null)
 
-// WebSocket 实时数据
-const { latestSensorData } = useWebSocket()
+// 图表展示最近 N 条实时数据（数据来自 WebSocket 后台缓存）
+const MAX_CHART_POINTS = 10
+
+// WebSocket 实时数据（模块级缓存：切页面不销毁，后台持续更新）
+const { latestSensorData, recentRecords } = useWebSocket()
 
 // 设备选择（有数据上报的 d_no）
 const devices = ref<string[]>([])
 const selectedDevice = ref('')
+
+// 最新一条数据：直接来自 WS 实时缓存（不再从数据库加载）
+const latestRecord = computed<Data | null>(() => {
+  if (!selectedDevice.value) return null
+  const ws = latestSensorData.value.get(selectedDevice.value)
+  return ws ? toDataRecord(ws) : null
+})
+
+// 图表数据：来自 WS 后台缓存的最近记录（切页面不销毁）
+const chartRecords = computed<Data[]>(() => {
+  if (!selectedDevice.value) return []
+  const list = recentRecords.value.get(selectedDevice.value) ?? []
+  return list.slice(-MAX_CHART_POINTS).map(toDataRecord)
+})
 
 onMounted(async () => {
   try {
@@ -31,8 +44,7 @@ onMounted(async () => {
   } catch (e) {
     console.error('获取设备列表失败:', e)
   }
-  await loadMappers()
-  loadHistoryData()
+  loadMappers()
 })
 const cardFields = computed<CardField[]>(() => {
   const fields: CardField[] = [
@@ -77,68 +89,29 @@ async function loadMappers() {
   }
 }
 
-async function loadHistoryData() {
-  loading.value = true
-  error.value = null
-  try {
-    const where: Where = {}
-    if (selectedDevice.value) {
-      where.d_no = { value: selectedDevice.value, operator: '=' }
-    }
-
-    const data = await getData('data', {
-      limit: 10,
-      offset: 0,
-      order_table: 'id',
-      desc: true,
-      where,
-    })
-    if (data.length > 0) {
-      latestRecord.value = data[0] ?? null
-      recentRecords.value = [...data].reverse()
-    } else {
-      latestRecord.value = null
-      recentRecords.value = []
-    }
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '获取数据失败'
-  } finally {
-    loading.value = false
-  }
-}
-
-// 切换设备时重新加载
-watch(selectedDevice, async () => {
-  // 切换时先清空旧数据，避免图表用旧数据渲染新配置导致 ECharts 报错
-  latestRecord.value = null
-  recentRecords.value = []
-  await loadMappers()
-  loadHistoryData()
+// 切换设备时仅刷新字段映射（数据直接来自 WS 后台缓存，无需从数据库加载）
+watch(selectedDevice, () => {
+  loadMappers()
 })
 
-// 监听 WebSocket 实时数据，更新 latestRecord
-watch(
-  () => (selectedDevice.value ? latestSensorData.value.get(selectedDevice.value) : undefined),
-  (wsData) => {
-    if (wsData && selectedDevice.value) {
-      latestRecord.value = {
-        id: latestRecord.value?.id ?? 0,
-        d_no: wsData.d_no,
-        field1: wsData.wen_du1,
-        field2: wsData.wen_du2,
-        field3: wsData.jia_re,
-        field4: wsData.shui_beng,
-        field5: wsData.liu_liang1,
-        field6: wsData.liu_liang2,
-        field7: wsData.ya_li,
-        field8: null,
-        field9: null,
-        field10: null,
-        c_time: wsData.timestamp,
-      }
-    }
-  },
-)
+// 将 WS 实时数据转换为 Data 记录（最新卡片 + 趋势图共用）
+function toDataRecord(wsData: WsData): Data {
+  return {
+    id: 0,
+    d_no: wsData.d_no,
+    field1: wsData.wen_du1,
+    field2: wsData.wen_du2,
+    field3: wsData.jia_re,
+    field4: wsData.shui_beng,
+    field5: wsData.liu_liang1,
+    field6: wsData.liu_liang2,
+    field7: wsData.ya_li,
+    field8: null,
+    field9: null,
+    field10: null,
+    c_time: wsData.timestamp,
+  }
+}
 </script>
 
 <template>
@@ -156,11 +129,10 @@ watch(
         <ElIcon><Watch /></ElIcon>
         最新数据
       </h3>
-      <div v-if="error" class="error-state">{{ error }}</div>
-      <div v-else-if="!latestRecord && !loading" class="empty-state">暂无数据</div>
+      <div v-if="!latestRecord" class="empty-state">暂无数据</div>
       <DataCard
-        v-else-if="latestRecord"
-        :data="latestRecord as Record<string, unknown>"
+        v-else
+        :data="latestRecord as unknown as Record<string, unknown>"
         :fields="cardFields"
       />
     </div>
@@ -169,10 +141,10 @@ watch(
         <ElIcon><TrendCharts /></ElIcon>
         最近10条数据趋势
       </h3>
-      <div v-if="recentRecords.length === 0" class="empty-state">暂无数据</div>
+      <div v-if="chartRecords.length === 0" class="empty-state">暂无数据</div>
       <div v-else class="chart-container">
         <DataChart
-          :data="recentRecords as Record<string, unknown>[]"
+          :data="chartRecords as unknown as Record<string, unknown>[]"
           :columns="chartColumns"
           mode="line"
           x-axis-key="c_time"

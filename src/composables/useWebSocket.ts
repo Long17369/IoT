@@ -1,5 +1,5 @@
 import { ref, shallowRef } from 'vue'
-import type { WsData, WsAlarm, WsMessage } from '@/server/types'
+import type { WsData, WsAlarm, WsMessage, WsDirectUpdate } from '@/server/types'
 
 /**
  * WebSocket 单例连接管理器
@@ -16,6 +16,13 @@ const WS_URL =
 const connected = ref(false)
 const latestSensorData = shallowRef<Map<string, WsData>>(new Map())
 const alarms = ref<WsAlarm[]>([])
+
+// 每设备后台缓存的最近实时记录条数
+const MAX_RECENT_RECORDS = 50
+// 后台实时记录缓存（模块级：切页面不销毁，WS 持续更新；供“最新数据”页图表使用）
+const recentRecords = shallowRef<Map<string, WsData[]>>(new Map())
+// 服务端数据修改通知（t_direct 变更；保留最近 20 条，供配置页同步；失败只汇报）
+const directUpdates = ref<WsDirectUpdate[]>([])
 
 let ws: WebSocket | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -76,9 +83,15 @@ function handleMessage(msg: WsMessage) {
   switch (msg.event) {
     case 'data': {
       const data = msg.data as WsData
+      // 更新最新数据
       const newMap = new Map(latestSensorData.value)
       newMap.set(data.d_no, data)
       latestSensorData.value = newMap
+      // 后台累积该设备最近记录（切页面不销毁，逐条实时更新，供图表实时滚动）
+      const newRecords = new Map(recentRecords.value)
+      const list = [...(newRecords.get(data.d_no) ?? []), data].slice(-MAX_RECENT_RECORDS)
+      newRecords.set(data.d_no, list)
+      recentRecords.value = newRecords
       break
     }
     case 'alarm': {
@@ -91,6 +104,11 @@ function handleMessage(msg: WsMessage) {
       // 重连去重：同 id（补推/重复推送）不重复添加
       if (data.id && alarms.value.some((a) => a.id === data.id)) return
       alarms.value = [data, ...alarms.value].slice(0, 50)
+      break
+    }
+    case 'direct': {
+      const data = msg.data as WsDirectUpdate
+      directUpdates.value = [...directUpdates.value, data].slice(-20)
       break
     }
   }
@@ -115,8 +133,11 @@ export function useWebSocket() {
   return {
     connected,
     latestSensorData,
+    recentRecords,
+    directUpdates,
     alarms,
     getDeviceSensorData,
+    getRecentRecords: (d_no: string) => recentRecords.value.get(d_no) ?? [],
     clearAlarms,
     clearDeviceAlarms,
   }

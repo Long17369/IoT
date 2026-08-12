@@ -170,7 +170,7 @@ export type ControlTarget = 'heat' | 'water'
 export type ControlAction = 'on' | 'off'
 
 // ========== WebSocket 推送事件类型 ==========
-export type WsEventType = 'data' | 'alarm'
+export type WsEventType = 'data' | 'alarm' | 'direct'
 
 // WebSocket 传感器数据推送（新数据结构）
 export interface WsData {
@@ -194,7 +194,17 @@ export interface WsAlarm {
   timestamp: string
 }
 
-export type WsMessageData = WsData | WsAlarm
+// WebSocket 数据修改通知（服务端修改 t_direct 后推送，供前端同步配置页；失败时 error 只汇报不处理）
+export interface WsDirectUpdate {
+  d_no: string
+  config_id: string
+  value?: string // 修改后的值（失败时缺失）
+  source?: string // 控制来源：manual/auto/config（预留 device）
+  success: boolean
+  error?: string // 修改失败的错误信息
+}
+
+export type WsMessageData = WsData | WsAlarm | WsDirectUpdate
 
 export interface WsMessage {
   event: WsEventType

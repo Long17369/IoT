@@ -102,6 +102,9 @@ async function onControlUpdated() {
     console.error('刷新指令数据失败:', e)
   }
 }
+
+// TODO: 服务端数据修改通知（WS direct 事件）的前端处理暂不实现：
+//       成功→防抖刷新配置页；失败→ElMessage 错误提示（用户要求先留 TODO）
 </script>
 
 <template>

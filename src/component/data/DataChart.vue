@@ -46,14 +46,16 @@ const lineBarOption = computed(() => {
   const xColKey = props.xAxisKey || stringColumns.value[0]?.key
   const xCol = props.columns.find((c) => c.key === xColKey)
 
-  // 格式化时间：将 ISO 字符串转为 MM:SS 格式
+  // 格式化时间：将 ISO（含 T）与 "YYYY-MM-DD HH:mm:ss" 两种时间格式统一转为 MM:SS
   const formatTime = (val: unknown): string => {
     const s = String(val ?? '')
-    const d = new Date(s)
-    if (!isNaN(d.getTime()) && s.includes('T')) {
-      const minutes = String(d.getMinutes()).padStart(2, '0')
-      const seconds = String(d.getSeconds()).padStart(2, '0')
-      return `${minutes}:${seconds}`
+    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(s)) {
+      const d = new Date(s.replace(' ', 'T'))
+      if (!isNaN(d.getTime())) {
+        const minutes = String(d.getMinutes()).padStart(2, '0')
+        const seconds = String(d.getSeconds()).padStart(2, '0')
+        return `${minutes}:${seconds}`
+      }
     }
     return s
   }
@@ -75,7 +77,7 @@ const lineBarOption = computed(() => {
         textStyle: { color: '#999', fontSize: 14 },
       },
       xAxis: { type: 'category', data: [] },
-      yAxis: { type: 'value' },
+      yAxis: [{ type: 'value' }],
       series: [],
     }
   }
@@ -87,6 +89,7 @@ const lineBarOption = computed(() => {
       type: props.mode as 'line' | 'bar',
       data: props.data.map((d) => Number(d[col.key]) || 0),
       smooth: props.mode === 'line',
+      yAxisIndex: 0,
     }))
 
     return {
@@ -94,7 +97,7 @@ const lineBarOption = computed(() => {
       legend: { bottom: 0 },
       grid: { left: 60, right: 40, top: 30, bottom: 60 },
       xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
-      yAxis: { type: 'value', name: cols[0]?.unit || '' },
+      yAxis: [{ type: 'value', name: cols[0]?.unit || '' }],
       series,
     }
   }
@@ -108,13 +111,14 @@ const lineBarOption = computed(() => {
       legend: { bottom: 0 },
       grid: { left: 60, right: 40, top: 30, bottom: 60 },
       xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
-      yAxis: { type: 'value', name: firstCol.unit || '' },
+      yAxis: [{ type: 'value', name: firstCol.unit || '' }],
       series: [
         {
           name: columnLabel(firstCol),
           type: props.mode as 'line' | 'bar',
           data: props.data.map((d) => Number(d[firstCol.key]) || 0),
           smooth: props.mode === 'line',
+          yAxisIndex: 0,
         },
       ],
     }
@@ -204,6 +208,7 @@ const lineBarOption = computed(() => {
       type: props.mode as 'line' | 'bar',
       data: props.data.map((d) => Number(d[col.key]) || 0),
       smooth: props.mode === 'line',
+      yAxisIndex: 0,
     }))
 
     return {
@@ -211,7 +216,7 @@ const lineBarOption = computed(() => {
       legend: { bottom: 0 },
       grid: { left: 60, right: 40, top: 30, bottom: 60 },
       xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
-      yAxis: { type: 'value', name: cols[0]?.unit || '' },
+      yAxis: [{ type: 'value', name: cols[0]?.unit || '' }],
       series,
     }
   }
@@ -303,7 +308,7 @@ const chartOption = computed(() => (props.mode === 'pie' ? pieOption.value : lin
 
 <template>
   <div class="data-chart">
-    <VChart :option="chartOption" autoresize />
+    <VChart :option="chartOption" autoresize :update-options="{ notMerge: true }" />
   </div>
 </template>
 
