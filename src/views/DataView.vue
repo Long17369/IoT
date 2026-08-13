@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElPagination, ElButton } from 'element-plus'
+import { ElTabs, ElTabPane, ElPagination, ElButton } from 'element-plus'
 import DataTable from '../component/data/DataTable.vue'
 import DataFilter from '../component/data/DataFilter.vue'
+import DataChartView from '../component/data/DataChartView.vue'
 import { getData, getDataMapper, getCount, getDataDevices } from '../server/api'
 import type { ColumnDef } from '../types/dataType'
 import type { FilterOption, FilterValue } from '../component/data/DataFilter.vue'
@@ -58,6 +59,9 @@ function restoreStateFromUrl() {
 // 分页配置
 const pageSize = ref(10)
 const currentPage = ref(1)
+
+// 数据总览二级 Tab：数据表格 / 历史图表
+const activeTab = ref<'table' | 'chart'>('table')
 
 // 查询参数
 const sortProp = ref('id')
@@ -204,42 +208,51 @@ function identify() {
 
 <template>
   <div class="data-view">
-    <div class="header-section">
-      <h3>传感器数据总览</h3>
-      <span class="count-tip">
-        共 {{ totalCount }} 条
-        <span v-if="loading" class="loading-text">(加载中...)</span>
-      </span>
-    </div>
+    <ElTabs v-model="activeTab" class="data-tabs">
+      <ElTabPane label="数据表格" name="table">
+        <div class="data-tab-inner">
+          <div class="header-section">
+            <h3>传感器数据总览</h3>
+            <span class="count-tip">
+              共 {{ totalCount }} 条
+              <span v-if="loading" class="loading-text">(加载中...)</span>
+            </span>
+          </div>
 
-    <!-- 筛选器 -->
-    <div class="filter-section">
-      <DataFilter v-model="filterValue" :options="filterOptions" @change="applyFilters" />
-      <ElButton @click="identify">识别</ElButton>
-    </div>
+          <!-- 筛选器 -->
+          <div class="filter-section">
+            <DataFilter v-model="filterValue" :options="filterOptions" @change="applyFilters" />
+            <ElButton @click="identify">识别</ElButton>
+          </div>
 
-    <!-- 上半：表格 -->
-    <div class="table-section" v-loading="loading">
-      <DataTable
-        :data="rawData"
-        :columns="columns"
-        :selectable="true"
-        @sort-change="onSortChange"
-      />
-    </div>
+          <!-- 表格 -->
+          <div class="table-section" v-loading="loading">
+            <DataTable
+              :data="rawData"
+              :columns="columns"
+              :selectable="true"
+              @sort-change="onSortChange"
+            />
+          </div>
 
-    <!-- 分页 -->
-    <div class="pagination-section">
-      <ElPagination
-        v-model:current-page="currentPage"
-        v-model:page-size="pageSize"
-        :total="totalCount"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next"
-        @current-change="onPageChange"
-        @size-change="onSizeChange"
-      />
-    </div>
+          <!-- 分页 -->
+          <div class="pagination-section">
+            <ElPagination
+              v-model:current-page="currentPage"
+              v-model:page-size="pageSize"
+              :total="totalCount"
+              :page-sizes="[10, 20, 50, 100]"
+              layout="total, sizes, prev, pager, next"
+              @current-change="onPageChange"
+              @size-change="onSizeChange"
+            />
+          </div>
+        </div>
+      </ElTabPane>
+      <ElTabPane label="历史图表" name="chart" lazy>
+        <DataChartView />
+      </ElTabPane>
+    </ElTabs>
   </div>
 </template>
 
@@ -248,8 +261,31 @@ function identify() {
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
   padding: 4px 0;
+}
+
+.data-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.data-tabs :deep(.el-tabs__header) {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+.data-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+}
+.data-tabs :deep(.el-tab-pane) {
+  height: 100%;
+}
+.data-tab-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .header-section {

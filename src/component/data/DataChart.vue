@@ -32,6 +32,8 @@ const props = defineProps<{
   xAxisKey?: string
   /** 是否使用双Y轴，默认false */
   dualYAxis?: boolean
+  /** X轴时间格式：'ms'=MM:SS（默认）；'full'=按跨度自适应完整时间 */
+  xTimeFormat?: 'ms' | 'full'
 }>()
 
 const chartColumns = computed(() => props.columns.filter((c) => c.chartable))
@@ -46,15 +48,34 @@ const lineBarOption = computed(() => {
   const xColKey = props.xAxisKey || stringColumns.value[0]?.key
   const xCol = props.columns.find((c) => c.key === xColKey)
 
-  // 格式化时间：将 ISO（含 T）与 "YYYY-MM-DD HH:mm:ss" 两种时间格式统一转为 MM:SS
+  // 计算时间跨度（xTimeFormat='full' 时按跨度自适应显示）
+  const rawTimes = props.data
+    .map((d) => new Date(String(d[xColKey ?? 'c_time'] ?? '').replace(' ', 'T')).getTime())
+    .filter((t) => !isNaN(t))
+  const spanMs = rawTimes.length > 1 ? Math.max(...rawTimes) - Math.min(...rawTimes) : 0
+
+  // 格式化时间：默认 MM:SS；xTimeFormat='full' 时短范围 HH:MM:SS、长范围 MM-DD HH:MM
   const formatTime = (val: unknown): string => {
     const s = String(val ?? '')
     if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(s)) {
       const d = new Date(s.replace(' ', 'T'))
       if (!isNaN(d.getTime())) {
-        const minutes = String(d.getMinutes()).padStart(2, '0')
-        const seconds = String(d.getSeconds()).padStart(2, '0')
-        return `${minutes}:${seconds}`
+        if (props.xTimeFormat !== 'full') {
+          const minutes = String(d.getMinutes()).padStart(2, '0')
+          const seconds = String(d.getSeconds()).padStart(2, '0')
+          return `${minutes}:${seconds}`
+        }
+        if (spanMs > 0 && spanMs <= 3600_000) {
+          const hh = String(d.getHours()).padStart(2, '0')
+          const mm = String(d.getMinutes()).padStart(2, '0')
+          const ss = String(d.getSeconds()).padStart(2, '0')
+          return `${hh}:${mm}:${ss}`
+        }
+        const mo = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        const hh = String(d.getHours()).padStart(2, '0')
+        const mm = String(d.getMinutes()).padStart(2, '0')
+        return `${mo}-${day} ${hh}:${mm}`
       }
     }
     return s
@@ -319,6 +340,7 @@ const chartOption = computed(() => (props.mode === 'pie' ? pieOption.value : lin
   background: #ffffff;
   border-radius: 4px;
   border: 1px solid #e4e7ed;
+  overflow: hidden;
 }
 
 .data-chart :deep(.vue-echarts) {

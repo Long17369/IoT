@@ -60,6 +60,26 @@ export async function getData(
 }
 
 /**
+ * 获取历史图表聚合数据（时间桶降采样，AVG）
+ * @param params d_no/start/end/buckets
+ * @returns Promise<Data[]>
+ */
+export const getChartData = (params: {
+  d_no: string
+  start: string // 'YYYY-MM-DD HH:mm:ss'
+  end: string
+  buckets?: number
+}) => {
+  const queryString = new URLSearchParams({
+    d_no: params.d_no,
+    start: params.start,
+    end: params.end,
+    buckets: String(params.buckets ?? 1000),
+  }).toString()
+  return fetchApi<Data[]>(`${BASE_URL}/data/chart?${queryString}`)
+}
+
+/**
  * 获取数据总数
  * @param table 表名
  * @param where 查询条件
