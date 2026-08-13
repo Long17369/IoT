@@ -10,6 +10,7 @@ import {
   GridComponent,
 } from 'echarts/components'
 import VChart from 'vue-echarts'
+import { fmtNum } from '@/utils/format'
 import type { ColumnDef, DisplayMode } from '../../types/dataType'
 
 use([
@@ -42,6 +43,9 @@ const stringColumns = computed(() => props.columns.filter((c) => !c.chartable))
 function columnLabel(col: ColumnDef): string {
   return col.unit ? `${col.label} (${col.unit})` : col.label
 }
+
+/** ECharts tooltip 值格式化：超 2 位小数截断 */
+const fmtNumValue = (value: number | string) => fmtNum(value)
 
 const lineBarOption = computed(() => {
   // 确定X轴字段
@@ -114,7 +118,7 @@ const lineBarOption = computed(() => {
     }))
 
     return {
-      tooltip: { trigger: 'axis' },
+      tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
       legend: { bottom: 0 },
       grid: { left: 60, right: 40, top: 30, bottom: 60 },
       xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
@@ -128,7 +132,7 @@ const lineBarOption = computed(() => {
     // 只有一个指标时，使用单Y轴
     const firstCol = cols[0]!
     return {
-      tooltip: { trigger: 'axis' },
+      tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
       legend: { bottom: 0 },
       grid: { left: 60, right: 40, top: 30, bottom: 60 },
       xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
@@ -207,7 +211,7 @@ const lineBarOption = computed(() => {
       })
 
       return {
-        tooltip: { trigger: 'axis' },
+        tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
         legend: { bottom: 0 },
         grid: { left: 60, right: 60, top: 30, bottom: 60 },
         xAxis: {
@@ -233,7 +237,7 @@ const lineBarOption = computed(() => {
     }))
 
     return {
-      tooltip: { trigger: 'axis' },
+      tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
       legend: { bottom: 0 },
       grid: { left: 60, right: 40, top: 30, bottom: 60 },
       xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
@@ -290,7 +294,7 @@ const lineBarOption = computed(() => {
   }
 
   return {
-    tooltip: { trigger: 'axis' },
+    tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
     legend: { bottom: 0 },
     grid: { left: 60, right: 60, top: 30, bottom: 60 },
     xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { fmtNum } from '@/utils/format'
 
 interface Props {
   title: string
@@ -15,6 +16,9 @@ const props = withDefaults(defineProps<Props>(), {
   trend: 'stable',
   status: 'normal',
 })
+
+/** 显示值：超 2 位小数截断（整数/短小数/非数值原样） */
+const displayValue = computed(() => fmtNum(props.value))
 
 const trendIcon = computed(() => {
   switch (props.trend) {
@@ -48,7 +52,7 @@ const statusColor = computed(() => {
       <span class="card-trend" :class="trendClass">{{ trendIcon }}</span>
     </div>
     <div class="card-body">
-      <span class="card-value" :style="{ color: statusColor }">{{ value }}</span>
+      <span class="card-value" :style="{ color: statusColor }">{{ displayValue }}</span>
       <span v-if="unit" class="card-unit">{{ unit }}</span>
     </div>
   </div>

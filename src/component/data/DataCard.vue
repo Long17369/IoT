@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ElTag } from 'element-plus'
+import { fmtNum } from '@/utils/format'
 import type { CardField } from '../../types/dataType'
 
 const props = defineProps<{
@@ -14,8 +15,8 @@ const bodyFields = computed(() => props.fields.filter((f) => !f.section || f.sec
 const footerFields = computed(() => props.fields.filter((f) => f.section === 'footer'))
 
 function fmt(val: unknown, field: CardField): string {
-  const v = val ?? ''
-  return field.unit ? `${v}${field.unit}` : String(v)
+  const v = fmtNum(val)
+  return field.unit ? `${v}${field.unit}` : v
 }
 
 function tagType(field: CardField) {

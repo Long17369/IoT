@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElTable, ElTableColumn, ElTag } from 'element-plus'
+import { fmtNum } from '@/utils/format'
 import type { ColumnDef, SortInfo } from '../../types/dataType'
 
 const props = defineProps<{
@@ -55,8 +56,8 @@ function cellText(row: Record<string, unknown>, col: ColumnDef): string {
       return col.showOriginal ? `${mapped} (${key})` : mapped
     }
   }
-  if (!col.unit || col.unitPlacement === 'header') return String(val ?? '')
-  return `${val ?? ''}${col.unit}`
+  if (!col.unit || col.unitPlacement === 'header') return fmtNum(val)
+  return `${fmtNum(val)}${col.unit}`
 }
 
 /** 中文字符算 2 个宽度单位，英文/数字算 1 个 */
