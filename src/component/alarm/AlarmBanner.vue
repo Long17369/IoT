@@ -23,6 +23,18 @@ const activeAlarms = computed(() =>
   props.alarms.filter((a) => !dismissedIds.value.has(alarmKey(a))).slice(0, 3),
 )
 
+/** 横幅整体按最高等级着色：任一 error → 红，否则黄 */
+const bannerClass = computed(() =>
+  activeAlarms.value.some((a) => a.level === 'error' || a.type === 'error')
+    ? 'banner-error'
+    : 'banner-warning',
+)
+
+/** 条目文字颜色（自定义 color，空则随横幅等级） */
+function alarmColor(a: WsAlarm): string {
+  return a.color || ''
+}
+
 watch(
   () => props.alarms.length,
   () => {
@@ -44,13 +56,15 @@ function clearAll() {
 
 <template>
   <Transition name="banner">
-    <div v-if="visible && activeAlarms.length > 0" class="alarm-banner">
+    <div v-if="visible && activeAlarms.length > 0" class="alarm-banner" :class="bannerClass">
       <div class="banner-content">
         <el-icon class="banner-icon"><WarningFilled /></el-icon>
         <div class="alarm-list">
           <div v-for="alarm in activeAlarms" :key="alarmKey(alarm)" class="alarm-item">
             <span class="alarm-device">[{{ alarm.d_no }}]</span>
-            <span class="alarm-msg">{{ alarm.message }}</span>
+            <span class="alarm-msg" :style="alarmColor(alarm) ? { color: alarmColor(alarm) } : undefined">
+              {{ alarm.message }}
+            </span>
             <span class="alarm-time">{{ alarm.timestamp }}</span>
             <el-icon class="dismiss-btn" @click="dismiss(alarmKey(alarm))">
               <Close />
@@ -65,11 +79,19 @@ function clearAll() {
 
 <style scoped>
 .alarm-banner {
-  background: linear-gradient(135deg, #fef0f0, #fff2e8);
-  border: 1px solid #fbc4c4;
   border-radius: 8px;
   margin-bottom: 16px;
   overflow: hidden;
+}
+
+.alarm-banner.banner-error {
+  background: linear-gradient(135deg, #fef0f0, #fff2e8);
+  border: 1px solid #fbc4c4;
+}
+
+.alarm-banner.banner-warning {
+  background: linear-gradient(135deg, #fdf6ec, #fef9ef);
+  border: 1px solid #f5dab1;
 }
 
 .banner-content {

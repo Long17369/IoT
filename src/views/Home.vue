@@ -3,14 +3,15 @@ defineOptions({ name: 'HomePage' })
 import { ref, computed, onMounted } from 'vue'
 import { ElSelect, ElOption } from 'element-plus'
 import StatusCard from '@/component/dashboard/StatusCard.vue'
-import AlarmBanner from '@/component/alarm/AlarmBanner.vue'
-import { getDataDevices } from '@/server/api'
+import { getDataDevices, getDataMapper } from '@/server/api'
+import type { FieldMapper } from '@/server/types'
 import { useWebSocket } from '@/composables/useWebSocket'
 
-const { getDeviceSensorData, alarms, clearAlarms } = useWebSocket()
+const { getDeviceSensorData } = useWebSocket()
 
 const devices = ref<string[]>([])
 const selectedDevice = ref('')
+const fieldMappers = ref<FieldMapper[]>([])
 
 onMounted(async () => {
   try {
@@ -21,7 +22,17 @@ onMounted(async () => {
   } catch (e) {
     console.error('获取设备列表失败:', e)
   }
+  try {
+    fieldMappers.value = await getDataMapper('data')
+  } catch (e) {
+    console.error('获取字段映射失败:', e)
+  }
 })
+
+/** 显示名：优先取 t_field_mapper 的 f_name（不硬编码），缺失回退 */
+function label(db: string, fallback: string): string {
+  return fieldMappers.value.find((m) => m.db_name === db)?.f_name || fallback
+}
 
 const sensorData = computed(() => {
   if (!selectedDevice.value) return undefined
@@ -31,9 +42,6 @@ const sensorData = computed(() => {
 
 <template>
   <div class="dashboard">
-    <!-- 告警横幅 -->
-    <AlarmBanner :alarms="alarms" @clear="clearAlarms" />
-
     <!-- 顶部工具栏 -->
     <div class="dashboard-toolbar">
       <h2>📊 储运车状态总览</h2>
@@ -52,9 +60,9 @@ const sensorData = computed(() => {
 
     <!-- 传感器数据卡片 -->
     <div class="sensor-grid">
-      <StatusCard title="温度1" :value="sensorData?.wen_du1 ?? '--'" unit="°C" />
-      <StatusCard title="温度2" :value="sensorData?.wen_du2 ?? '--'" unit="°C" />
-      <StatusCard title="瞬时流量" :value="sensorData?.liu_liang2 ?? '--'" unit="L/min" />
+      <StatusCard :title="label('field1', '进水温度')" :value="sensorData?.wen_du1 ?? '--'" unit="°C" />
+      <StatusCard :title="label('field2', '出水温度')" :value="sensorData?.wen_du2 ?? '--'" unit="°C" />
+      <StatusCard :title="label('field6', '瞬时流量')" :value="sensorData?.liu_liang2 ?? '--'" unit="L/min" />
     </div>
 
     <!-- 当前设备信息 -->

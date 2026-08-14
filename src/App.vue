@@ -16,7 +16,11 @@ import {
 import { ElIcon } from 'element-plus'
 import HeaderCom from './component/HeaderCom.vue'
 import MenuCom from './component/MenuCom.vue'
+import AlarmBanner from './component/alarm/AlarmBanner.vue'
+import { useWebSocket } from '@/composables/useWebSocket'
 import type { MenuList } from './types/menuType'
+
+const { alarms, clearAlarms } = useWebSocket()
 
 const router = useRouter()
 const route = useRoute()
@@ -83,6 +87,8 @@ const activeIndex = ref(route.path)
     <ElHeader class="app-header">
       <HeaderCom :collapsed="isCollapse" @toggle="toggleSidebar" />
     </ElHeader>
+    <!-- 全局告警横幅：所有页面统一显示（警告/错误都走此通道） -->
+    <AlarmBanner :alarms="alarms" @clear="clearAlarms" />
     <ElContainer direction="horizontal" class="main-container">
       <ElAside
         :width="isCollapse ? '64px' : '220px'"

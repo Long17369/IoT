@@ -186,12 +186,21 @@ export interface WsData {
 }
 
 // WebSocket 告警推送
+// type: 'alarm' 堵塞/故障预警 | 'error' 错误 | 'reset' 手动复位（清除该设备实时预警）
 export interface WsAlarm {
   id: string // 预警唯一 ID（基于发生时间生成，用于重连去重）
   d_no: string
-  type: string // 'alarm' | 'error'
+  type: string // 'alarm' | 'error' | 'reset'
   message: string
   timestamp: string
+  /** 告警事件码（如 pressure_zero / spike / leak，对应后端 alarmConfig） */
+  code?: string
+  /** 等级：error=红 / warning=黄 */
+  level?: 'error' | 'warning'
+  /** 自定义颜色（空则按等级兜底） */
+  color?: string
+  /** 全屏闪烁（后端先实现格式，前端暂不渲染） */
+  fullscreen?: boolean
 }
 
 // WebSocket 数据修改通知（服务端修改 t_direct 后推送，供前端同步配置页；失败时 error 只汇报不处理）
