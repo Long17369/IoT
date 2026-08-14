@@ -1,13 +1,13 @@
 <script setup lang="ts">
 defineOptions({ name: 'HomePage' })
 import { ref, computed, onMounted } from 'vue'
-import { ElSelect, ElOption } from 'element-plus'
+import { ElSelect, ElOption, ElTag } from 'element-plus'
 import StatusCard from '@/component/dashboard/StatusCard.vue'
 import { getDataDevices, getDataMapper } from '@/server/api'
 import type { FieldMapper } from '@/server/types'
 import { useWebSocket } from '@/composables/useWebSocket'
 
-const { getDeviceSensorData } = useWebSocket()
+const { getDeviceSensorData, isOffline } = useWebSocket()
 
 const devices = ref<string[]>([])
 const selectedDevice = ref('')
@@ -55,6 +55,14 @@ const sensorData = computed(() => {
         >
           <ElOption v-for="d in devices" :key="d" :label="d" :value="d" />
         </ElSelect>
+        <ElTag
+          v-if="selectedDevice && isOffline(selectedDevice)"
+          type="danger"
+          effect="dark"
+          size="small"
+        >
+          📡 设备断开
+        </ElTag>
       </div>
     </div>
 

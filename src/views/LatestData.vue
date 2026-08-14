@@ -15,7 +15,7 @@ const fieldMappers = ref<FieldMapper[]>([])
 const MAX_CHART_POINTS = 10
 
 // WebSocket 实时数据（模块级缓存：切页面不销毁，后台持续更新）
-const { latestSensorData, recentRecords } = useWebSocket()
+const { latestSensorData, recentRecords, isOffline } = useWebSocket()
 
 // 设备选择（有数据上报的 d_no）
 const devices = ref<string[]>([])
@@ -134,7 +134,18 @@ function toDataRecord(wsData: WsData): Data {
         v-else
         :data="latestRecord as unknown as Record<string, unknown>"
         :fields="cardFields"
-      />
+      >
+        <template #header-right>
+          <ElTag
+            v-if="selectedDevice && isOffline(selectedDevice)"
+            type="danger"
+            effect="dark"
+            size="small"
+          >
+            📡 设备断开
+          </ElTag>
+        </template>
+      </DataCard>
     </div>
     <div class="chart-section">
       <h3>

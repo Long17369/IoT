@@ -16,6 +16,8 @@ const WS_URL =
 const connected = ref(false)
 const latestSensorData = shallowRef<Map<string, WsData>>(new Map())
 const alarms = ref<WsAlarm[]>([])
+// 断连设备集合（sensor_offline 告警添加，数据恢复/复位清除）
+const offlineDevices = ref<Set<string>>(new Set())
 
 // 每设备后台缓存的最近实时记录条数
 const MAX_RECENT_RECORDS = 50
@@ -83,6 +85,8 @@ function handleMessage(msg: WsMessage) {
   switch (msg.event) {
     case 'data': {
       const data = msg.data as WsData
+      // 数据到达即视为在线，清除断连标记
+      offlineDevices.value.delete(data.d_no)
       // 更新最新数据
       const newMap = new Map(latestSensorData.value)
       newMap.set(data.d_no, data)
@@ -99,7 +103,12 @@ function handleMessage(msg: WsMessage) {
       // 复位事件：清除该设备所有实时预警横幅
       if (data.type === 'reset') {
         clearDeviceAlarms(data.d_no)
+        offlineDevices.value.delete(data.d_no)
         return
+      }
+      // 断连告警：标记设备离线
+      if (data.code === 'sensor_offline') {
+        offlineDevices.value = new Set(offlineDevices.value).add(data.d_no)
       }
       // 重连去重：同 id（补推/重复推送）不重复添加
       if (data.id && alarms.value.some((a) => a.id === data.id)) return
@@ -136,6 +145,8 @@ export function useWebSocket() {
     recentRecords,
     directUpdates,
     alarms,
+    offlineDevices,
+    isOffline: (d_no: string) => offlineDevices.value.has(d_no),
     getDeviceSensorData,
     getRecentRecords: (d_no: string) => recentRecords.value.get(d_no) ?? [],
     clearAlarms,

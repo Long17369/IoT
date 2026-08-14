@@ -47,6 +47,10 @@ function columnLabel(col: ColumnDef): string {
 /** ECharts tooltip 值格式化：超 2 位小数截断 */
 const fmtNumValue = (value: number | string) => fmtNum(value)
 
+/** 无效点（跳变标注 invalid）置 null，使曲线在此断开 */
+const seriesValue = (d: Record<string, unknown>, key: string): number | null =>
+  d.invalid ? null : Number(d[key]) || 0
+
 const lineBarOption = computed(() => {
   // 确定X轴字段
   const xColKey = props.xAxisKey || stringColumns.value[0]?.key
@@ -112,7 +116,7 @@ const lineBarOption = computed(() => {
     const series = cols.map((col) => ({
       name: columnLabel(col),
       type: props.mode as 'line' | 'bar',
-      data: props.data.map((d) => Number(d[col.key]) || 0),
+      data: props.data.map((d) => seriesValue(d, col.key)),
       smooth: props.mode === 'line',
       yAxisIndex: 0,
     }))
@@ -141,7 +145,7 @@ const lineBarOption = computed(() => {
         {
           name: columnLabel(firstCol),
           type: props.mode as 'line' | 'bar',
-          data: props.data.map((d) => Number(d[firstCol.key]) || 0),
+          data: props.data.map((d) => seriesValue(d, firstCol.key)),
           smooth: props.mode === 'line',
           yAxisIndex: 0,
         },
@@ -195,7 +199,7 @@ const lineBarOption = computed(() => {
         series.push({
           name: columnLabel(col),
           type: props.mode as 'line' | 'bar',
-          data: props.data.map((d) => Number(d[col.key]) || 0),
+          data: props.data.map((d) => seriesValue(d, col.key)),
           smooth: props.mode === 'line',
           yAxisIndex: 0,
         })
@@ -204,7 +208,7 @@ const lineBarOption = computed(() => {
         series.push({
           name: columnLabel(col),
           type: props.mode as 'line' | 'bar',
-          data: props.data.map((d) => Number(d[col.key]) || 0),
+          data: props.data.map((d) => seriesValue(d, col.key)),
           smooth: props.mode === 'line',
           yAxisIndex: 1,
         })
@@ -231,7 +235,7 @@ const lineBarOption = computed(() => {
     const series = cols.map((col) => ({
       name: columnLabel(col),
       type: props.mode as 'line' | 'bar',
-      data: props.data.map((d) => Number(d[col.key]) || 0),
+      data: props.data.map((d) => seriesValue(d, col.key)),
       smooth: props.mode === 'line',
       yAxisIndex: 0,
     }))
@@ -267,7 +271,7 @@ const lineBarOption = computed(() => {
     series.push({
       name: columnLabel(col),
       type: props.mode as 'line' | 'bar',
-      data: props.data.map((d) => Number(d[col.key]) || 0),
+      data: props.data.map((d) => seriesValue(d, col.key)),
       smooth: props.mode === 'line',
       yAxisIndex: 0,
     })
@@ -286,7 +290,7 @@ const lineBarOption = computed(() => {
       series.push({
         name: columnLabel(col),
         type: props.mode as 'line' | 'bar',
-        data: props.data.map((d) => Number(d[col.key]) || 0),
+        data: props.data.map((d) => seriesValue(d, col.key)),
         smooth: props.mode === 'line',
         yAxisIndex: 1,
       })

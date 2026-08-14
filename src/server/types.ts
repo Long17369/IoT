@@ -183,6 +183,8 @@ export interface WsData {
   liu_liang1: string
   liu_liang2: string
   ya_li: string
+  /** 数据质量标记：true=疑似跳变/无效数据（前端曲线标注） */
+  invalid?: boolean
 }
 
 // WebSocket 告警推送
