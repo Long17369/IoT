@@ -133,7 +133,7 @@ export interface DataPayload {
   shui_beng: string | number // 水泵状态
   liu_liang1: string | number // 流量总计
   liu_liang2: string | number // 瞬时流量 L/min
-  ya_li: string | number // 水流压力
+  pressure: string | number // 水流压力
 }
 
 // 设备控制状态 (device_control)
@@ -182,7 +182,7 @@ export interface WsData {
   shui_beng: string
   liu_liang1: string
   liu_liang2: string
-  ya_li: string
+  pressure: string
   /** 数据质量标记：true=疑似跳变/无效数据（前端曲线标注） */
   invalid?: boolean
 }

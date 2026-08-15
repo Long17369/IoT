@@ -105,7 +105,7 @@ function toDataRecord(wsData: WsData): Data {
     field4: wsData.shui_beng,
     field5: wsData.liu_liang1,
     field6: wsData.liu_liang2,
-    field7: wsData.ya_li,
+    field7: wsData.pressure,
     field8: null,
     field9: null,
     field10: null,
