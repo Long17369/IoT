@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { ElSelect, ElOption } from 'element-plus'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
+import { ElSelect, ElOption, ElMessage } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 import ControlPanel from '@/component/control/ControlPanel.vue'
 import {
@@ -13,7 +13,7 @@ import {
 import { useWebSocket } from '@/composables/useWebSocket'
 import type { DirectConfig, Direct, ControlTarget, ControlAction } from '@/server/types'
 
-const { clearDeviceAlarms } = useWebSocket()
+const { clearDeviceAlarms, directUpdates } = useWebSocket()
 
 const devices = ref<string[]>([])
 const selectedDevice = ref('')
@@ -103,8 +103,36 @@ async function onControlUpdated() {
   }
 }
 
-// TODO: 服务端数据修改通知（WS direct 事件）的前端处理暂不实现：
-//       成功→防抖刷新配置页；失败→ElMessage 错误提示（用户要求先留 TODO）
+// 服务端数据修改通知（WS direct 事件）：自动控制/设备端/其他端口发起的配置变更实时同步到面板
+// 成功 → 防抖刷新配置页；失败 → ElMessage 错误提示（只汇报不处理）
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+function debouncedRefresh(delay = 200) {
+  if (refreshTimer) clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null
+    onControlUpdated()
+  }, delay)
+}
+
+// directUpdates 采用"追加到尾部"（见 useWebSocket），最新一条是最后一项
+watch(
+  () => directUpdates.value[directUpdates.value.length - 1],
+  (update) => {
+    if (!update) return
+    // 修改失败：错误提示（只汇报不处理）
+    if (update.success === false) {
+      ElMessage.error(update.error ?? '指令下发失败')
+      return
+    }
+    // 仅同步当前选中设备的变更
+    if (update.d_no && selectedDevice.value && update.d_no !== selectedDevice.value) return
+    debouncedRefresh()
+  },
+)
+
+onBeforeUnmount(() => {
+  if (refreshTimer) clearTimeout(refreshTimer)
+})
 </script>
 
 <template>
@@ -164,7 +192,6 @@ async function onControlUpdated() {
           :direct-values="directValues"
           :d-no="selectedDevice"
           :disabled="false"
-          @updated="onControlUpdated"
         />
       </div>
     </template>

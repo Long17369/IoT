@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElSelect, ElOption } from 'element-plus'
+import { ElSelect, ElOption, ElMessage } from 'element-plus'
 import ControlSwitch from './ControlSwitch.vue'
 import ControlSlider from './ControlSlider.vue'
 import { updateDirectData } from '@/server/api'
@@ -17,21 +17,19 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
 })
 
-const emit = defineEmits<{
-  updated: []
-}>()
-
 /** 本地乐观更新的值缓存，优先于 props.directValues */
 const localValues = ref<Record<string, string>>({})
 
-// 当 directValues 更新后，清除已同步的本地缓存
+// 当 directValues 更新后，清除已同步的本地缓存；
+// 服务端已有该配置值时一律以服务端为准（含设备状态回传 source=device、自动控制等外部变更），
+// 丢弃可能过期的乐观值——否则设备未真正开启时开关会被乐观值卡在"开"
 watch(
   () => props.directValues,
   (newValues) => {
     const fresh: Record<string, string> = {}
     for (const [key, val] of Object.entries(localValues.value)) {
       const synced = newValues.find((d) => d.config_id === key)
-      if (!synced || synced.value !== val) {
+      if (!synced) {
         fresh[key] = val
       }
     }
@@ -94,6 +92,14 @@ function getSliderStep(config: DirectConfig): number {
   return range > 0 ? Math.max(range / 100, 0.001) : 0.01
 }
 
+/** 回滚乐观更新：移除本地缓存，回落显示服务端实际值（如后端拒绝开启水泵/加热时） */
+function rollbackLocal(configId: string) {
+  if (!(configId in localValues.value)) return
+  const next = { ...localValues.value }
+  delete next[configId]
+  localValues.value = next
+}
+
 async function handleSwitchChange(config: DirectConfig, value: boolean) {
   if (props.disabled) return
   const [offCode, onCode] = config.f_value ? parseSwitchCodes(config.f_value) : ['0', '1']
@@ -101,10 +107,12 @@ async function handleSwitchChange(config: DirectConfig, value: boolean) {
 
   // 乐观更新 UI
   localValues.value = { ...localValues.value, [config.id]: sendValue }
-  // 异步提交，不阻塞 UI
-  updateDirectData({ config_id: config.id, value: sendValue, d_no: props.dNo })
-    .then(() => emit('updated'))
-    .catch((e) => console.error('指令下发失败:', e))
+  // 异步提交，不阻塞 UI；服务端状态变更统一由 WS direct 事件同步（见 StorageControl），不使用返回值触发刷新
+  updateDirectData({ config_id: config.id, value: sendValue, d_no: props.dNo }).catch((e) => {
+    console.error('指令下发失败:', e)
+    rollbackLocal(config.id) // 回滚乐观值，恢复显示服务端实际状态
+    ElMessage.error(e instanceof Error ? e.message : '指令下发失败')
+  })
 }
 
 async function handleInputChange(config: DirectConfig, rawValue: string) {
@@ -129,20 +137,24 @@ async function handleInputChange(config: DirectConfig, rawValue: string) {
 
   // 乐观更新 UI
   localValues.value = { ...localValues.value, [config.id]: sendValue }
-  // 异步提交，不阻塞 UI
-  updateDirectData({ config_id: config.id, value: sendValue, d_no: props.dNo })
-    .then(() => emit('updated'))
-    .catch((e) => console.error('指令下发失败:', e))
+  // 异步提交，不阻塞 UI；服务端状态变更统一由 WS direct 事件同步（见 StorageControl），不使用返回值触发刷新
+  updateDirectData({ config_id: config.id, value: sendValue, d_no: props.dNo }).catch((e) => {
+    console.error('指令下发失败:', e)
+    rollbackLocal(config.id) // 回滚乐观值，恢复显示服务端实际状态
+    ElMessage.error(e instanceof Error ? e.message : '指令下发失败')
+  })
 }
 
 async function handleSelectChange(config: DirectConfig, value: string) {
   if (props.disabled || !value) return
   // 乐观更新 UI
   localValues.value = { ...localValues.value, [config.id]: value }
-  // 异步提交，不阻塞 UI
-  updateDirectData({ config_id: config.id, value, d_no: props.dNo })
-    .then(() => emit('updated'))
-    .catch((e) => console.error('指令下发失败:', e))
+  // 异步提交，不阻塞 UI；服务端状态变更统一由 WS direct 事件同步（见 StorageControl），不使用返回值触发刷新
+  updateDirectData({ config_id: config.id, value, d_no: props.dNo }).catch((e) => {
+    console.error('指令下发失败:', e)
+    rollbackLocal(config.id) // 回滚乐观值，恢复显示服务端实际状态
+    ElMessage.error(e instanceof Error ? e.message : '指令下发失败')
+  })
 }
 
 /** 构建 configId → DirectConfig 的映射 */
