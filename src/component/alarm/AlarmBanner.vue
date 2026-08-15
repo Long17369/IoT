@@ -62,7 +62,10 @@ function clearAll() {
         <div class="alarm-list">
           <div v-for="alarm in activeAlarms" :key="alarmKey(alarm)" class="alarm-item">
             <span class="alarm-device">[{{ alarm.d_no }}]</span>
-            <span class="alarm-msg" :style="alarmColor(alarm) ? { color: alarmColor(alarm) } : undefined">
+            <span
+              class="alarm-msg"
+              :style="alarmColor(alarm) ? { color: alarmColor(alarm) } : undefined"
+            >
               {{ alarm.message }}
             </span>
             <span class="alarm-time">{{ alarm.timestamp }}</span>

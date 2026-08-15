@@ -68,9 +68,21 @@ const sensorData = computed(() => {
 
     <!-- 传感器数据卡片 -->
     <div class="sensor-grid">
-      <StatusCard :title="label('field1', '进水温度')" :value="sensorData?.wen_du1 ?? '--'" unit="°C" />
-      <StatusCard :title="label('field2', '出水温度')" :value="sensorData?.wen_du2 ?? '--'" unit="°C" />
-      <StatusCard :title="label('field6', '瞬时流量')" :value="sensorData?.liu_liang2 ?? '--'" unit="L/min" />
+      <StatusCard
+        :title="label('field1', '进水温度')"
+        :value="sensorData?.wen_du1 ?? '--'"
+        unit="°C"
+      />
+      <StatusCard
+        :title="label('field2', '出水温度')"
+        :value="sensorData?.wen_du2 ?? '--'"
+        unit="°C"
+      />
+      <StatusCard
+        :title="label('field6', '瞬时流量')"
+        :value="sensorData?.liu_liang2 ?? '--'"
+        unit="L/min"
+      />
     </div>
 
     <!-- 当前设备信息 -->
