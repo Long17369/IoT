@@ -125,14 +125,18 @@ onMounted(async () => {
   }
 })
 
-const range = computed<{ start: Date; end: Date }>(() => {
+/**
+ * 计算查询时间窗口：快捷范围取"当前时间往前推 activeRange 分钟"。
+ * 用普通函数而非 computed——computed 会缓存 new Date()，点"刷新"时窗口不会滑到最新，导致数据不更新。
+ */
+function getRange(): { start: Date; end: Date } {
   const end = new Date()
   if (activeRange.value === CUSTOM && customRange.value) {
     return { start: customRange.value[0], end: customRange.value[1] }
   }
   const start = new Date(end.getTime() - activeRange.value * 60 * 1000)
   return { start, end }
-})
+}
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const fmt = (d: Date) =>
@@ -142,7 +146,7 @@ async function load() {
   if (!selectedDevice.value) return
   loading.value = true
   try {
-    const r = range.value
+    const r = getRange()
     rawData.value = await getChartData({
       d_no: selectedDevice.value,
       start: fmt(r.start),
