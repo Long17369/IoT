@@ -47,9 +47,14 @@ function columnLabel(col: ColumnDef): string {
 /** ECharts tooltip 值格式化：超 2 位小数截断 */
 const fmtNumValue = (value: number | string) => fmtNum(value)
 
-/** 无效点（跳变标注 invalid）置 null，使曲线在此断开 */
-const seriesValue = (d: Record<string, unknown>, key: string): number | null =>
-  d.invalid ? null : Number(d[key]) || 0
+/** 空值（缺数据的桶）与跳变标注无效点置 null，使曲线在此断开 */
+const seriesValue = (d: Record<string, unknown>, key: string): number | null => {
+  if (d.invalid) return null
+  const raw = d[key]
+  if (raw === null || raw === undefined || raw === '') return null
+  const num = Number(raw)
+  return Number.isFinite(num) ? num : null
+}
 
 /** 固定调色板（与 ECharts 默认一致） */
 const PALETTE = [
