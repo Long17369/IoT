@@ -114,8 +114,22 @@ const columns = computed<ColumnDef[]>(() => {
 const filterOptions = ref<FilterOption[]>([
   { key: 'd_no', label: '设备编号', type: 'select', values: [] },
   { key: 'c_time', label: '时间范围', type: 'datetimerange' },
-  { key: 'field1', label: '控制来源', type: 'select', values: ['manual', 'auto', 'config', 'device']}
+  { key: 'field1', label: '控制来源', type: 'select', values: [], labels: {} },
 ])
+
+/** 用字段映射里的词表填充 select 筛选器的取值与显示名（取值仍是原始值，查询用它） */
+function applyMapperLabels(key: string, dbName: string) {
+  const option = filterOptions.value.find((o) => o.key === key)
+  const mapper = fieldMappers.value.find((m) => m.db_name === dbName)
+  if (!option || !mapper?.mapping) return
+  try {
+    const labels = JSON.parse(mapper.mapping) as Record<string, string>
+    option.labels = labels
+    option.values = Object.keys(labels)
+  } catch {
+    // 词表不是合法 JSON 时保持原样
+  }
+}
 
 // 筛选器状态
 const filterValue = ref<Record<string, FilterValue>>({})
@@ -215,6 +229,7 @@ function onSortChange(info: { prop: string; order: 'ascending' | 'descending' | 
 onMounted(async () => {
   restoreStateFromUrl()
   fieldMappers.value = await getDataMapper(TABLE)
+  applyMapperLabels('field1', 'field1')
   await loadFilterOptions()
   await loadData()
   syncStateToUrl()

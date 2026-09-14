@@ -6,19 +6,26 @@ import {
   ElTag,
   ElButton,
   ElIcon,
+  ElInput,
   ElDatePicker,
   ElInputNumber,
 } from 'element-plus'
 import { Filter, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 
 /** 筛选类型 */
-export type FilterType = 'select' | 'datetimerange' | 'range'
+export type FilterType = 'select' | 'text' | 'datetimerange' | 'range'
 
 export interface FilterOption {
   key: string
   label: string
   type?: FilterType
   values?: string[]
+  /** select 选项的显示名（原始值 → 显示名，如 { manual: '手动控制' }）；未命中时显示原始值 */
+  labels?: Record<string, string>
+  /** text 输入框占位文本 */
+  placeholder?: string
+  /** select 允许输入过滤并创建候选项（候选值不固定时用） */
+  allowCreate?: boolean
   unit?: string
 }
 
@@ -49,6 +56,30 @@ function handleSelect(key: string, value: string) {
   selectedValues.value = nv
 }
 
+/** 'text' 类型的输入草稿：输入时不查询，回车/失焦/清空时才提交 */
+const textDrafts = ref<Record<string, string>>({})
+
+function textValue(option: FilterOption): string {
+  return textDrafts.value[option.key] ?? (selectedValues.value[option.key] as string) ?? ''
+}
+
+function onTextInput(key: string, val: string) {
+  textDrafts.value = { ...textDrafts.value, [key]: val }
+}
+
+/** 回车/失焦提交：以输入框当前值为准 */
+function commitText(key: string, val: string) {
+  const text = val ?? ''
+  textDrafts.value = { ...textDrafts.value, [key]: text }
+  handleSelect(key, text)
+}
+
+/** 清空（点右侧清除图标）：同步草稿并移除该筛选项 */
+function clearText(key: string) {
+  textDrafts.value = { ...textDrafts.value, [key]: '' }
+  handleSelect(key, '')
+}
+
 function handleDateRange(key: string, value: [Date, Date] | null) {
   const nv = { ...selectedValues.value }
   if (!value) delete nv[key]
@@ -70,10 +101,12 @@ function clearFilter(key: string) {
   const nv = { ...selectedValues.value }
   delete nv[key]
   selectedValues.value = nv
+  delete textDrafts.value[key]
 }
 
 function clearAllFilters() {
   selectedValues.value = {}
+  textDrafts.value = {}
 }
 
 /** 获取筛选值可读文本 */
@@ -96,9 +129,8 @@ function filterValueText(key: string, opt: FilterOption): string {
     if (max === Infinity) return `≥ ${min}${u}`
     return `${min}${u} ~ ${max}${u}`
   }
-  return String(val)
+  return opt.labels?.[String(val)] ?? String(val)
 }
-
 const activeFiltersList = computed(() => {
   const list: { key: string; label: string; value: string }[] = []
   for (const [key] of Object.entries(selectedValues.value)) {
@@ -189,11 +221,30 @@ onBeforeUnmount(() => {
             :model-value="(selectedValues[option.key] as string) || ''"
             placeholder="全部"
             clearable
+            :filterable="option.allowCreate === true"
+            :allow-create="option.allowCreate === true"
             class="filter-select"
             @change="(val: string) => handleSelect(option.key, val)"
           >
-            <ElOption v-for="v in option.values" :key="v" :label="v" :value="v" />
+            <ElOption
+              v-for="v in option.values"
+              :key="v"
+              :label="option.labels?.[v] ?? v"
+              :value="v"
+            />
           </ElSelect>
+
+          <!-- text（模糊搜索） -->
+          <ElInput
+            v-else-if="option.type === 'text'"
+            :model-value="textValue(option)"
+            :placeholder="option.placeholder || '输入关键字'"
+            clearable
+            class="filter-text"
+            @input="(val: string) => onTextInput(option.key, val)"
+            @change="(val: string) => commitText(option.key, val)"
+            @clear="() => clearText(option.key)"
+          />
 
           <!-- datetimerange -->
           <ElDatePicker
@@ -366,23 +417,20 @@ onBeforeUnmount(() => {
 }
 
 .filter-body {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
+  display: grid;
+  /* 等宽分列：换行时最后一行不会被撑得比其它项宽 */
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
   gap: 12px;
-  align-items: flex-start;
-  align-content: flex-start;
+  align-items: start;
 }
 
 .filter-item {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 200px;
-  flex: 1 1 280px;
+  min-width: 0;
   max-width: 420px;
   height: auto;
-  align-self: flex-start;
 }
 
 .filter-label {
@@ -395,12 +443,23 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-:deep(.filter-date) {
+.filter-text {
   width: 100%;
-  max-width: 360px;
-  flex: 0 0 auto;
+}
+
+:deep(.filter-date) {
+  /* 项目没有全局 border-box 重置：不改 box-sizing 时 width:100% 是内容宽，
+     再加上左右 padding 会超出父容器 */
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   height: 32px;
-  align-self: flex-start;
+}
+
+/* 日期范围选择器内部两个 input 的 min-width 默认为内容宽（≈126px），
+   不置 0 会撑破外层容器（两个 input + 分隔符 + 图标 > 可用宽度） */
+:deep(.filter-date .el-range-input) {
+  min-width: 0;
 }
 
 :deep(.filter-picker-popper) {
@@ -462,15 +521,13 @@ onBeforeUnmount(() => {
   }
 
   .filter-body {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     gap: 10px;
   }
 
   .filter-item {
-    min-width: auto;
     width: 100%;
     max-width: 100%;
-    flex: 0 0 auto;
   }
 
   .filter-label {

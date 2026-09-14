@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElPagination } from 'element-plus'
+import { ElMessage, ElPagination } from 'element-plus'
 import DataTable from '../component/data/DataTable.vue'
 import DataFilter from '../component/data/DataFilter.vue'
 import { useAlarmData } from '../composables/useAlarmData'
 import { getDataDevices } from '../server/api'
 import type { ColumnDef } from '../types/dataType'
 import type { FilterOption, FilterValue } from '../component/data/DataFilter.vue'
-import type { Where } from '@/server/types'
+import type { Data, Where } from '@/server/types'
 
 const {
   data: rawData,
@@ -43,14 +43,35 @@ const columns = computed<ColumnDef[]>(() => {
   }))
 })
 
-// 筛选选项：设备编号 + 时间范围
+// 筛选选项：设备编号 + 时间范围 + 错误信息（模糊搜索）+ 错误代码（筛选）
 const filterOptions = computed<FilterOption[]>(() => [
   { key: 'd_no', label: '设备编号', type: 'select', values: deviceOptions.value },
   { key: 'c_time', label: '时间范围', type: 'datetimerange' },
+  { key: 'field1', label: '错误信息', type: 'text', placeholder: '输入关键字搜索' },
+  {
+    key: 'field2',
+    label: '错误代码',
+    type: 'select',
+    values: errorCodeOptions.value,
+    allowCreate: true,
+  },
 ])
 
 // 设备选项（用于 d_no 下拉）
 const deviceOptions = ref<string[]>([])
+
+// 错误代码候选值：后端无 distinct 接口，从已加载过的数据里累积去重
+const errorCodeOptions = ref<string[]>([])
+
+function collectErrorCodes(rows: Data[]) {
+  const codes = new Set(errorCodeOptions.value)
+  for (const row of rows) {
+    if (row.field2) codes.add(row.field2)
+  }
+  if (codes.size !== errorCodeOptions.value.length) {
+    errorCodeOptions.value = [...codes].sort()
+  }
+}
 
 // 筛选器状态
 const filterValue = ref<Record<string, FilterValue>>({})
@@ -58,7 +79,7 @@ const filterValue = ref<Record<string, FilterValue>>({})
 // 加载数据
 async function loadData() {
   try {
-    const [, count] = await Promise.all([
+    const [rows, count] = await Promise.all([
       fetchData({
         limit: pageSize.value,
         offset: (currentPage.value - 1) * pageSize.value,
@@ -69,8 +90,9 @@ async function loadData() {
       fetchCount(whereClause.value),
     ])
     totalCount.value = count
-  } catch {
-    // handled in composable
+    collectErrorCodes(rows)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '加载故障数据失败')
   }
 }
 
@@ -83,6 +105,10 @@ function applyFilters() {
     // select（默认）
     if (!opt?.type || opt.type === 'select') {
       where[key] = { value: String(value), operator: '=' }
+    }
+    // 文本搜索（模糊匹配）
+    if (opt?.type === 'text') {
+      where[key] = { value: `%${String(value)}%`, operator: 'like' }
     }
     // 时间范围
     if (opt?.type === 'datetimerange') {
@@ -150,7 +176,7 @@ onMounted(async () => {
 
     <div class="pagination-section">
       <ElPagination
-        v-model:current-page="currentPage"
+        :current-page="currentPage"
         v-model:page-size="pageSize"
         :total="totalCount"
         :page-sizes="[10, 20, 50, 100]"
