@@ -23,7 +23,7 @@ onMounted(async () => {
     console.error('获取设备列表失败:', e)
   }
   try {
-    fieldMappers.value = await getDataMapper('data')
+    fieldMappers.value = await getDataMapper('sensor')
   } catch (e) {
     console.error('获取字段映射失败:', e)
   }
@@ -44,7 +44,7 @@ const sensorData = computed(() => {
   <div class="dashboard">
     <!-- 顶部工具栏 -->
     <div class="dashboard-toolbar">
-      <h2>📊 储运车状态总览</h2>
+      <h2>📊 水循环状态总览</h2>
       <div class="device-selector">
         <span>当前设备：</span>
         <ElSelect
@@ -78,11 +78,14 @@ const sensorData = computed(() => {
         :value="sensorData?.wen_du2 ?? '--'"
         unit="°C"
       />
+      <StatusCard title="加热速度" :value="sensorData?.heat_rate ?? '--'" unit="°C/min" />
+      <StatusCard title="压力" :value="sensorData?.pressure ?? '--'" unit="kPa" />
       <StatusCard
         :title="label('field6', '瞬时流量')"
         :value="sensorData?.liu_liang2 ?? '--'"
         unit="L/min"
       />
+      <StatusCard title="平均水流" :value="sensorData?.avg_flow ?? '--'" unit="L/min" />
     </div>
 
     <!-- 当前设备信息 -->

@@ -11,9 +11,13 @@ import {
   resetDeviceBlock,
 } from '@/server/api'
 import { useWebSocket } from '@/composables/useWebSocket'
-import type { DirectConfig, Direct, ControlTarget, ControlAction } from '@/server/types'
+import type { DirectConfig, Direct } from '@/server/types'
 
-const { clearDeviceAlarms, directUpdates } = useWebSocket()
+/** 手动控制对象/动作（POST /api/control 的 target / action） */
+type ControlTarget = 'heat' | 'water'
+type ControlAction = 'on' | 'off'
+
+const { clearDeviceAlarms, directUpdates, isDeviceBlocked } = useWebSocket()
 
 const devices = ref<string[]>([])
 const selectedDevice = ref('')
@@ -22,10 +26,11 @@ const directValues = ref<Direct[]>([])
 const loading = ref(false)
 const sending = ref(false)
 
-/** 设备是否处于堵塞状态（t_direct 存在 blocked=1） */
-const isBlocked = computed(() =>
-  directValues.value.some((d) => d.config_id === 'blocked' && d.value === '1'),
-)
+/**
+ * 设备是否处于堵塞锁定（复位按钮显示条件）：
+ * lock 事件的 active 含 'blocked'，或收到 config_id='lock' 的锁定通知。
+ */
+const isBlocked = computed(() => !!selectedDevice.value && isDeviceBlocked(selectedDevice.value))
 
 onMounted(async () => {
   try {
@@ -141,7 +146,7 @@ onBeforeUnmount(() => {
     <div class="control-toolbar">
       <h2>
         <el-icon><Setting /></el-icon>
-        储运舱控制
+        系统控制
       </h2>
       <div class="device-selector">
         <span>控制设备：</span>
@@ -176,7 +181,7 @@ onBeforeUnmount(() => {
           <el-button type="danger" :disabled="sending" @click="sendCommand('water', 'off')">
             水泵关
           </el-button>
-          <!-- 手动复位：仅设备堵塞时显示，清除堵塞状态与预警 -->
+          <!-- 手动复位：设备处于堵塞锁定时显示 -->
           <el-button v-if="isBlocked" type="success" :disabled="sending" @click="onResetBlock">
             复位
           </el-button>

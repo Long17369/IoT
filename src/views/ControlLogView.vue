@@ -10,7 +10,7 @@ import type { FilterOption, FilterValue } from '../component/data/DataFilter.vue
 import type { Data, FieldMapper } from '@/server/types'
 
 // 控制记录查询表名
-const TABLE = 'control-log'
+const TABLE = 'control'
 
 // 原始数据状态
 const rawData = ref<Data[]>([])
@@ -114,6 +114,7 @@ const columns = computed<ColumnDef[]>(() => {
 const filterOptions = ref<FilterOption[]>([
   { key: 'd_no', label: '设备编号', type: 'select', values: [] },
   { key: 'c_time', label: '时间范围', type: 'datetimerange' },
+  { key: 'field1', label: '控制来源', type: 'select', values: ['manual', 'auto', 'config', 'device']}
 ])
 
 // 筛选器状态

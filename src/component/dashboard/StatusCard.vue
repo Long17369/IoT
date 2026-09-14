@@ -6,7 +6,7 @@ interface Props {
   title: string
   value: string | number
   unit?: string
-  trend?: 'up' | 'down' | 'stable'
+  trend?: 'up' | 'down' | 'stable' | 'right'
   /** 状态: normal=正常, warning=警告, danger=危险 */
   status?: 'normal' | 'warning' | 'danger'
 }
@@ -26,8 +26,10 @@ const trendIcon = computed(() => {
       return '↑'
     case 'down':
       return '↓'
-    default:
+    case 'right':
       return '→'
+    default:
+      return ''
   }
 })
 

@@ -108,8 +108,8 @@ async function loadData() {
   loading.value = true
   try {
     const [data, countResult] = await Promise.all([
-      getData('data', queryParams.value),
-      getCount('data', queryParams.value.where),
+      getData('sensor', queryParams.value),
+      getCount('sensor', queryParams.value.where),
     ])
     rawData.value = data
     totalCount.value = countResult.count
@@ -195,7 +195,7 @@ function onSortChange(info: { prop: string; order: 'ascending' | 'descending' | 
 // 初始化
 onMounted(async () => {
   restoreStateFromUrl()
-  fieldMappers.value = await getDataMapper('data')
+  fieldMappers.value = await getDataMapper('sensor')
   await loadFilterOptions()
   await loadData()
   syncStateToUrl()

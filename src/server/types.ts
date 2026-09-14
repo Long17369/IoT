@@ -16,14 +16,28 @@ export interface ErrorResponse {
 
 export type ApiResponse<T> = SuccessResponse<T> | ErrorResponse
 
-export type DbName = `field${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10}` | 'id' | 'd_no' | 'c_time'
+/**
+ * 数据源（后端资源域）：每个域对应一张“数据表 + 字段映射表”。
+ * - sensor   → sensor_data / sensor_data_mapper   （传感器采集数据）
+ * - behavior → behavior_data / behavior_data_mapper（行为数据）
+ * - error    → error_msg / error_msg_mapper        （故障/告警）
+ * - control  → control_log / control_log_mapper    （控制记录）
+ *
+ * 兼容说明：历史命名 'data'（原单一“数据”域）暂时在 api.ts 内重定向到 sensor_data。
+ */
+export type DataSourceName = 'sensor' | 'behavior' | 'error' | 'control' | 'data'
+
+export type FieldNum = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
+export type FieldName = `field${FieldNum}`
+export type DbName = 'id' | 'd_no' | 'c_time' | FieldName
 
 // 字段映射类型
 export interface FieldMapper {
   id: number
-  f_name: string
-  db_name: DbName
-  p_name: string
+  f_name: string // 显示名称
+  db_name: DbName // 数据库字段名
+  p_name: string // 内部字段名
+  api_name?: string | null // 后端字段名（对应 MQTT 上报 payload 的键，如 temp_in）
   unit: string // 单位
   type: '1' | '2' | '3' // 1: 文本, 2: 图片, 3: 视频
   visible: '0' | '1' // 0: 不可见, 1: 可见
@@ -31,21 +45,35 @@ export interface FieldMapper {
   mapping?: string | null // 值映射词表(JSON)：值->显示名，词条全局唯一复用
 }
 
-// 传感器数据类型
-export interface Data {
+// 数据类型
+export type Data = {
   id: number
   d_no: string | null
-  field1: string | null
-  field2: string | null
-  field3: string | null
-  field4: string | null
-  field5: string | null
-  field6: string | null
-  field7: string | null
-  field8: string | null
-  field9: string | null
-  field10: string | null
   c_time: string // ISO 8601 格式
+} & Record<FieldName, string | null>
+
+/**
+ * 历史图表降采样点（时间桶 AVG）：
+ * 只含桶标签 `c_time` 与数据列（`field1..N`，键为数据表列名），值为该桶内平均值（空桶为 null）。
+ * 对应接口：`GET /api/{source}/chart?d_no&start&end&buckets`（旧契约 `/api/data/chart` 的别名见 api.ts）。
+ */
+export interface ChartPoint {
+  c_time: string
+  [column: string]: string | number | null
+}
+
+/** 图表聚合查询参数（前端） */
+export interface ChartQueryParams {
+  /** 设备编号 */
+  d_no: string
+  /** 开始时间（含）'YYYY-MM-DD HH:mm:ss' */
+  start: string
+  /** 结束时间（含） */
+  end: string
+  /** 目标桶数（降采样点数），默认 1000 */
+  buckets?: number
+  /** 数据源：sensor / behavior / error / control（默认 sensor，'data' 仍可指 sensor） */
+  source?: string
 }
 
 export interface DirectConfig {
@@ -87,18 +115,7 @@ export interface DataCount {
   count: number
 }
 
-export interface Device {
-  id: number
-  device_name: string
-  remarks: string | null
-  c_time: string
-  number: string
-}
-
-export type CreateDeviceParams = Omit<Device, 'id' | 'c_time'>
-export type UpdateDeviceParams = Partial<Omit<Device, 'id' | 'c_time'>>
-
-export type WhereOperator = '=' | '>' | '<' | '>=' | '<='
+export type WhereOperator = '=' | '>' | '<' | '>=' | '<=' | '!='
 
 export interface WhereCondition {
   value: string
@@ -109,10 +126,20 @@ export interface Where {
   [key: string]: WhereCondition | WhereCondition[]
 }
 
+export interface DataQueryParamsWithoutTable {
+  orderBy?: string // 默认: "id"
+  columns?: string[]
+  where?: Where
+  order?: string // 默认: false
+  limit?: string // 默认: 10, 最大: 100
+  offset?: string // 默认: 0
+  distinct?: string
+}
+
 // 查询参数
 export interface DataQueryParams {
-  table: string // 表名
-  orderBy: string // 默认: "id"
+  table?: string // 表名
+  orderBy?: string // 默认: "id"
   columns?: string[]
   where?: Where
   order?: string // 默认: false
@@ -122,39 +149,28 @@ export interface DataQueryParams {
 }
 
 // ========== MQTT 消息类型 ==========
-
 // 数据信息 (data) —— 新数据结构
+// 设备端累计流量(liu_liang1)已暂时移除，由服务端本地计算替代；字段名已更新
+// 为兼容历史数据与前端展示，落库 field1~7 与 WS 推送仍保持原字段位置/名称
 export interface DataPayload {
-  id: string // 设备/数据源 id
+  id: string // 设备/数据源 id（存入 t_data.d_no）
   time: string // 数据时间
-  wen_du1: string | number // 温度1
-  wen_du2: string | number // 温度2
-  jia_re: string | number // 加热开关状态
-  shui_beng: string | number // 水泵状态
-  liu_liang1: string | number // 流量总计
-  liu_liang2: string | number // 瞬时流量 L/min
+  temp_in: string | number // 温度1（进水，原 wen_du1）
+  temp_out: string | number // 温度2（出水，原 wen_du2）
+  heat_Y1: string | number // 加热开关状态（原 jia_re）
+  water_Y2: string | number // 水泵状态（原 shui_beng）
+  flow_rate: string | number // 瞬时流量 L/min（原 liu_liang2）
   pressure: string | number // 水流压力
+  // 预留：设备端累计流量（flow_source=0 数据验证时使用；当前设备端已移除，本地计算替代）
+  liu_liang1?: string | number
 }
 
-// 设备控制状态 (device_control)
-export interface DeviceControlPayload {
-  id: string // 设备/数据源 id
-  Real_Time: string
-  mode: string
-  TinDL: string
-  TinDH: string
-  TBegin: string
-  TEnd: string
-  LXD: string
-  Bright: string
-  SpeedM2: string
-  SpeedM1: string
-}
+// 设备控制状态 (device_control) —— control/ 现为服务器下发 topic，已无入站处理
+// 入站 topic 仅 data/
 
 // MQTT 入
 interface MQTTMapper {
   data: DataPayload
-  device_control: DeviceControlPayload
 }
 
 export type MQTTTopic = keyof MQTTMapper
@@ -165,12 +181,27 @@ export interface MQTTMessage {
   payload: MQTTPayload<MQTTTopic>
 }
 
-// 控制指令（command.ts 新协议）
-export type ControlTarget = 'heat' | 'water'
-export type ControlAction = 'on' | 'off'
+// MQTT 出
+export interface MQTTMessageOut {
+  topic: string // 出站发送 topic（配置项，如 device_control/）
+  d_no?: string
+  payload: Record<string, string | number | undefined> // 兼容旧 key-value 指令与 command.ts Modbus 帧
+}
+
+// ========== 控制总线 ==========
+/** 控制记录（统一模型）：所有控制（手动/自动/配置）都经控制总线记录 */
+export interface ControlRecord {
+  source: 'manual' | 'auto' | 'config' | 'device' // 控制来源：手动/自动/配置/设备上报
+  target: string // 控制对象：heat/water/配置名...
+  action: string // 动作：on/off/具体值...
+  value: string // 实际修改的数据库值
+  d_no?: string // 设备/数据源 id
+  /** 控制理由（自动控制必填，落库 t_control_log.field5；如'水管堵塞：压力归零'） */
+  reason?: string
+}
 
 // ========== WebSocket 推送事件类型 ==========
-export type WsEventType = 'data' | 'alarm' | 'direct'
+export type WsEventType = 'data' | 'alarm' | 'direct' | 'lock'
 
 // WebSocket 传感器数据推送（新数据结构）
 export interface WsData {
@@ -183,23 +214,27 @@ export interface WsData {
   liu_liang1: string
   liu_liang2: string
   pressure: string
-  /** 数据质量标记：true=疑似跳变/无效数据（前端曲线标注） */
+  /** 实时加热速度(°C/min)，基于配置窗口(heat_rate_window，默认60s)计算 */
+  heat_rate: string
+  /** 实时平均水流(L/min)，基于配置窗口(avg_flow_window，默认60s)计算 */
+  avg_flow: string
+  /** 数据质量标记：true=疑似跳变/无效数据（前端曲线标注，来自 sensor_spike mark 模式） */
   invalid?: boolean
 }
 
 // WebSocket 告警推送
 // type: 'alarm' 堵塞/故障预警 | 'error' 错误 | 'reset' 手动复位（清除该设备实时预警）
 export interface WsAlarm {
-  id: string // 预警唯一 ID（基于发生时间生成，用于重连去重）
+  id: string // 预警唯一 ID（基于发生时间生成，用于前端重连去重）
   d_no: string
-  type: string // 'alarm' | 'error' | 'reset'
+  type: 'alarm' | 'error' | 'reset'
   message: string
   timestamp: string
-  /** 告警事件码（如 pressure_zero / spike / leak，对应后端 alarmConfig） */
+  /** 告警事件码（如 pressure_zero / overpressure；由命中组件自行定义） */
   code?: string
   /** 等级：error=红 / warning=黄 */
   level?: 'error' | 'warning'
-  /** 自定义颜色（空则按等级兜底） */
+  /** 自定义颜色（空则前端按等级兜底） */
   color?: string
   /** 全屏闪烁（后端先实现格式，前端暂不渲染） */
   fullscreen?: boolean
@@ -215,7 +250,26 @@ export interface WsDirectUpdate {
   error?: string // 修改失败的错误信息
 }
 
-export type WsMessageData = WsData | WsAlarm | WsDirectUpdate
+/**
+ * WebSocket 锁状态推送（服务端保护性锁定变更：堵塞 / 过压 / 空转 / 泄漏）。
+ * 锁本身由后端 `@core/locks` 统一管理（内存为准，落库 `device_locks` 供重启恢复）。
+ */
+export interface WsLock {
+  d_no: string
+  /** 变更后设备是否仍处于锁定 */
+  locked: boolean
+  /** 变更后仍有效的锁类型（空数组 = 已无锁） */
+  active: string[]
+  /** 本次变化的锁类型（解锁时保留，便于前端定位） */
+  type?: string
+  /** 锁定原因（告警码或描述） */
+  reason?: string
+  /** 限时锁到期时间戳(ms)；长期锁缺省 */
+  expiresAt?: number
+  timestamp: string
+}
+
+export type WsMessageData = WsData | WsAlarm | WsDirectUpdate | WsLock
 
 export interface WsMessage {
   event: WsEventType

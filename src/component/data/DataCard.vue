@@ -47,12 +47,12 @@ function tagType(field: CardField) {
     <div
       v-if="bodyFields.length"
       class="card-body"
-      :style="{ gridTemplateColumns: `repeat(${Math.min(bodyFields.length, 2)}, 1fr)` }"
+      :style="{ gridTemplateColumns: `repeat(${Math.min(bodyFields.length, 4)}, 1fr)` }"
     >
       <div v-for="f in bodyFields" :key="f.key" class="data-item">
         <span class="item-label">{{ f.label }}</span>
         <span class="item-value">
-          <ElTag v-if="f.tag" size="small" effect="plain" round>
+          <ElTag v-if="f.tag" size="small" effect="plain" round class="item-value-tag">
             {{ fmt(data[f.key], f) }}
           </ElTag>
           <span v-else>{{ fmt(data[f.key], f) }}</span>
@@ -74,7 +74,7 @@ function tagType(field: CardField) {
 <style scoped>
 .data-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 1200px;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
@@ -134,14 +134,18 @@ function tagType(field: CardField) {
 }
 
 .item-label {
-  font-size: 12px;
+  font-size: 18px;
   color: #909399;
 }
 
 .item-value {
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 500;
   color: #303133;
+}
+
+.item-value-tag {
+  font-size: 16px;
 }
 
 .card-footer {

@@ -63,6 +63,14 @@ const cardFields = computed<CardField[]>(() => {
       tag: true,
     })
   }
+
+  // 实时计算指标（不在 t_field_mapper，来自 WS 推送的 heat_rate/avg_flow）
+  const calcKeys = new Set(fields.map((f) => f.key))
+  const calcFields: CardField[] = [
+    { key: 'field8', label: '加热速度', unit: '°C/min', section: 'body', tag: true },
+    { key: 'field9', label: '平均水流', unit: 'L/min', section: 'body', tag: true },
+  ]
+  for (const cf of calcFields) if (!calcKeys.has(cf.key)) fields.push(cf)
   return fields
 })
 
@@ -83,7 +91,7 @@ const chartColumns = computed<ColumnDef[]>(() => {
 
 async function loadMappers() {
   try {
-    fieldMappers.value = await getDataMapper('data')
+    fieldMappers.value = await getDataMapper('sensor')
   } catch (err) {
     console.error('获取字段映射失败:', err)
   }
@@ -106,8 +114,8 @@ function toDataRecord(wsData: WsData): Data {
     field5: wsData.liu_liang1,
     field6: wsData.liu_liang2,
     field7: wsData.pressure,
-    field8: null,
-    field9: null,
+    field8: wsData.heat_rate,
+    field9: wsData.avg_flow,
     field10: null,
     c_time: wsData.timestamp,
   }

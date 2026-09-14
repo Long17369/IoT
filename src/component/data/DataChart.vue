@@ -51,6 +51,94 @@ const fmtNumValue = (value: number | string) => fmtNum(value)
 const seriesValue = (d: Record<string, unknown>, key: string): number | null =>
   d.invalid ? null : Number(d[key]) || 0
 
+/** 固定调色板（与 ECharts 默认一致） */
+const PALETTE = [
+  '#5470c6',
+  '#91cc75',
+  '#fac858',
+  '#ee6666',
+  '#73c0de',
+  '#3ba272',
+  '#fc8452',
+  '#9a60b4',
+  '#ea7ccc',
+] as const
+
+/**
+ * 根据列 key 生成稳定颜色：同一指标在任何时刻、任何位置都是同一颜色，
+ * 避免实时数据更新时 series 顺序/轴位变化导致颜色跳动。
+ */
+function stableColor(key: string): string {
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0
+  return PALETTE[h % PALETTE.length] ?? PALETTE[0]!
+}
+
+/** 收集指定列的有效数值（跳过 invalid 置空的点） */
+function collectValues(cols: ColumnDef[]): number[] {
+  const vals: number[] = []
+  for (const col of cols) {
+    for (const d of props.data) {
+      const v = seriesValue(d, col.key)
+      if (v !== null) vals.push(v)
+    }
+  }
+  return vals
+}
+
+/** 舍入到 2 位小数，消除浮点误差（如 33.190000000000001 → 33.19） */
+function round2(v: number): number {
+  return Math.round(v * 100) / 100
+}
+
+/** Y 轴刻度格式化：最多保留 2 位小数，避免超长小数（包装 fmtNum 防止 ECharts 传入 index 作为 maxDigits） */
+const fmtTick = (v: number | string) => fmtNum(v, 2)
+
+/**
+ * 计算 Y 轴范围：折线模式下基于数据自适应 min/max 并加 10% padding，
+ * 使变化幅度小的曲线（如 26.4~27.5°C 的温度波动）能被精细观察；
+ * 柱状模式保持 0 基准（返回空对象）。
+ *
+ * 上下限规则：
+ * - 数据无负值时下界不低于 0；无正值时上界不高于 0（避免无负数据却出现负轴）；
+ * - 全部同值按 ±5%（至少 ±1）展开，避免曲线贴成一条直线；
+ * - 全 0 数据展开为 [0, 1]，避免产生空范围。
+ */
+function axisRange(cols: ColumnDef[]): { min?: number; max?: number } {
+  if (props.mode === 'bar') return {}
+  const vals = collectValues(cols)
+  if (vals.length === 0) return {}
+  const min = Math.min(...vals)
+  const max = Math.max(...vals)
+  if (!isFinite(min) || !isFinite(max)) return {}
+
+  const hasPositive = vals.some((v) => v > 0)
+  const hasNegative = vals.some((v) => v < 0)
+  const range = max - min
+
+  let lo: number
+  let hi: number
+  if (range === 0) {
+    // 全部同值：按数值 ±5%（至少 ±1）展开
+    const pad = Math.max(Math.abs(max) * 0.05, 1)
+    lo = min - pad
+    hi = max + pad
+  } else {
+    const pad = range * 0.1
+    lo = min - pad
+    hi = max + pad
+  }
+
+  // 数据无负值时下界不低于 0；无正值时上界不高于 0
+  if (!hasNegative) lo = Math.max(lo, 0)
+  if (!hasPositive) hi = Math.min(hi, 0)
+
+  // 全 0 数据 clamp 后会变成 [0,0]，展开为正向范围避免空轴
+  if (lo === hi) hi = lo + Math.max(Math.abs(lo) * 0.05, 1)
+
+  return { min: round2(lo), max: round2(hi) }
+}
+
 const lineBarOption = computed(() => {
   // 确定X轴字段
   const xColKey = props.xAxisKey || stringColumns.value[0]?.key
@@ -111,195 +199,78 @@ const lineBarOption = computed(() => {
     }
   }
 
-  // 不使用双Y轴，所有数据使用同一个Y轴
-  if (!props.dualYAxis) {
-    const series = cols.map((col) => ({
-      name: columnLabel(col),
-      type: props.mode as 'line' | 'bar',
-      data: props.data.map((d) => seriesValue(d, col.key)),
-      smooth: props.mode === 'line',
-      yAxisIndex: 0,
-    }))
+  // 生成单个系列的配置（固定颜色：同一指标始终同一颜色，避免实时刷新时颜色跳动）
+  const mkSeries = (col: ColumnDef, yAxisIndex: number) => ({
+    name: columnLabel(col),
+    type: props.mode as 'line' | 'bar',
+    data: props.data.map((d) => seriesValue(d, col.key)),
+    smooth: props.mode === 'line',
+    yAxisIndex,
+    color: stableColor(col.key),
+  })
 
-    return {
-      tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
-      legend: { bottom: 0 },
-      grid: { left: 60, right: 40, top: 30, bottom: 60 },
-      xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
-      yAxis: [{ type: 'value', name: cols[0]?.unit || '' }],
-      series,
-    }
+  // 公共 option 骨架
+  const baseOption = {
+    tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
+    legend: { bottom: 0 },
   }
 
-  // 使用双Y轴：将指标分成两组，小数值在左侧，大数值在右侧
-  if (cols.length === 1) {
-    // 只有一个指标时，使用单Y轴
-    const firstCol = cols[0]!
+  // 是否使用单Y轴：未开启双轴、只有 1 个指标、或所有指标同单位。
+  // 同单位合并到同一轴，配合下方 Y 轴自适应上下限，能让细微波动清晰可见。
+  const allSameUnit = cols.every((c) => c.unit === cols[0]?.unit)
+  const useSingleAxis = !props.dualYAxis || cols.length === 1 || allSameUnit
+
+  if (useSingleAxis) {
     return {
-      tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
-      legend: { bottom: 0 },
+      ...baseOption,
       grid: { left: 60, right: 40, top: 30, bottom: 60 },
       xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
-      yAxis: [{ type: 'value', name: firstCol.unit || '' }],
-      series: [
+      yAxis: [
         {
-          name: columnLabel(firstCol),
-          type: props.mode as 'line' | 'bar',
-          data: props.data.map((d) => seriesValue(d, firstCol.key)),
-          smooth: props.mode === 'line',
-          yAxisIndex: 0,
+          type: 'value',
+          name: cols[0]?.unit || '',
+          axisLabel: { formatter: fmtTick },
+          ...axisRange(cols),
         },
       ],
+      series: cols.map((col) => mkSeries(col, 0)),
     }
   }
 
-  // 计算每个指标的数据范围（最大值-最小值），用于判断是否需要双Y轴
-  const colStats = cols.map((col) => {
-    const values = props.data.map((d) => Number(d[col.key]) || 0)
-    const min = Math.min(...values)
-    const max = Math.max(...values)
-    const avg = values.reduce((a, b) => a + b, 0) / values.length
-    return { col, min, max, avg, range: max - min }
-  })
+  // 双Y轴：按列定义顺序稳定分组（前一半左轴、后一半右轴），
+  // 不再按动态平均值排序，避免实时数据更新导致指标在左右轴之间跳动、颜色错乱
+  const midIndex = Math.ceil(cols.length / 2)
+  const leftCols = cols.slice(0, midIndex)
+  const rightCols = cols.slice(midIndex)
 
-  // 按平均值排序
-  colStats.sort((a, b) => a.avg - b.avg)
+  const series: Record<string, unknown>[] = [
+    ...leftCols.map((col) => mkSeries(col, 0)),
+    ...rightCols.map((col) => mkSeries(col, 1)),
+  ]
 
-  // 检查是否需要双Y轴
-  const allSameUnit = cols.every((c) => c.unit === cols[0]?.unit)
-
-  // 同单位但数值范围差异大（如温差2°C vs 温度25°C），需要双Y轴分开显示
-  if (allSameUnit && colStats.length >= 2) {
-    const maxAvg = Math.max(...colStats.map((s) => s.avg))
-    // 如果某个指标的平均值不到最大平均值的 20%，说明量级差异大，需要双Y轴
-    const smallCols = colStats.filter((s) => s.avg < maxAvg * 0.2).map((s) => s.col)
-    const normalCols = colStats.filter((s) => s.avg >= maxAvg * 0.2).map((s) => s.col)
-
-    if (smallCols.length > 0 && normalCols.length > 0) {
-      // 量级差异大：正常值在左轴，小值在右轴
-      const series: Record<string, unknown>[] = []
-      const yAxis: Record<string, unknown>[] = [
-        {
-          type: 'value',
-          name: normalCols[0] ? columnLabel(normalCols[0]) : '',
-          position: 'left',
-          axisLine: { show: true, lineStyle: { color: '#5470c6' } },
-          axisLabel: { color: '#5470c6' },
-        },
-        {
-          type: 'value',
-          name: smallCols[0] ? columnLabel(smallCols[0]) : '',
-          position: 'right',
-          axisLine: { show: true, lineStyle: { color: '#91cc75' } },
-          axisLabel: { color: '#91cc75' },
-        },
-      ]
-
-      normalCols.forEach((col) => {
-        series.push({
-          name: columnLabel(col),
-          type: props.mode as 'line' | 'bar',
-          data: props.data.map((d) => seriesValue(d, col.key)),
-          smooth: props.mode === 'line',
-          yAxisIndex: 0,
-        })
-      })
-      smallCols.forEach((col) => {
-        series.push({
-          name: columnLabel(col),
-          type: props.mode as 'line' | 'bar',
-          data: props.data.map((d) => seriesValue(d, col.key)),
-          smooth: props.mode === 'line',
-          yAxisIndex: 1,
-        })
-      })
-
-      return {
-        tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
-        legend: { bottom: 0 },
-        grid: { left: 60, right: 60, top: 30, bottom: 60 },
-        xAxis: {
-          type: 'category',
-          data: xData,
-          name: xCol?.label ?? '',
-          axisLabel: { rotate: 30 },
-        },
-        yAxis,
-        series,
-      }
-    }
-  }
-
-  // 同一单位且量级接近，使用单Y轴
-  if (allSameUnit) {
-    const series = cols.map((col) => ({
-      name: columnLabel(col),
-      type: props.mode as 'line' | 'bar',
-      data: props.data.map((d) => seriesValue(d, col.key)),
-      smooth: props.mode === 'line',
-      yAxisIndex: 0,
-    }))
-
-    return {
-      tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
-      legend: { bottom: 0 },
-      grid: { left: 60, right: 40, top: 30, bottom: 60 },
-      xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
-      yAxis: [{ type: 'value', name: cols[0]?.unit || '' }],
-      series,
-    }
-  }
-
-  // 需要双Y轴：按平均值分组
-  const midIndex = Math.max(1, Math.ceil(colStats.length / 2))
-  const leftCols = colStats.slice(0, midIndex).map((s) => s.col)
-  const rightCols = colStats.slice(midIndex).map((s) => s.col)
-
-  const series: Record<string, unknown>[] = []
-  const yAxis: Record<string, unknown>[] = []
-
-  // 左侧Y轴
-  yAxis.push({
-    type: 'value',
-    name: leftCols.length > 0 ? columnLabel(leftCols[0]!) : '',
-    position: 'left',
-    axisLine: { show: true, lineStyle: { color: '#5470c6' } },
-    axisLabel: { color: '#5470c6' },
-  })
-
-  leftCols.forEach((col) => {
-    series.push({
-      name: columnLabel(col),
-      type: props.mode as 'line' | 'bar',
-      data: props.data.map((d) => seriesValue(d, col.key)),
-      smooth: props.mode === 'line',
-      yAxisIndex: 0,
-    })
-  })
-
-  // 右侧Y轴（仅在有右侧指标时添加）
+  const yAxis: Record<string, unknown>[] = [
+    {
+      type: 'value',
+      name: leftCols[0] ? columnLabel(leftCols[0]) : '',
+      position: 'left',
+      axisLine: { show: true, lineStyle: { color: '#5470c6' } },
+      axisLabel: { color: '#5470c6', formatter: fmtTick },
+      ...axisRange(leftCols),
+    },
+  ]
   if (rightCols.length > 0) {
     yAxis.push({
       type: 'value',
       name: columnLabel(rightCols[0]!),
       position: 'right',
       axisLine: { show: true, lineStyle: { color: '#91cc75' } },
-      axisLabel: { color: '#91cc75' },
-    })
-    rightCols.forEach((col) => {
-      series.push({
-        name: columnLabel(col),
-        type: props.mode as 'line' | 'bar',
-        data: props.data.map((d) => seriesValue(d, col.key)),
-        smooth: props.mode === 'line',
-        yAxisIndex: 1,
-      })
+      axisLabel: { color: '#91cc75', formatter: fmtTick },
+      ...axisRange(rightCols),
     })
   }
 
   return {
-    tooltip: { trigger: 'axis', valueFormatter: fmtNumValue },
-    legend: { bottom: 0 },
+    ...baseOption,
     grid: { left: 60, right: 60, top: 30, bottom: 60 },
     xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
     yAxis,

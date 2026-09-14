@@ -21,11 +21,8 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: `http://${apiHost}:${apiPort}`,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, ''),
-        },
-        '/ws': {
-          target: `ws://${apiHost}:${apiPort}`,
           ws: true,
+          // rewrite: (path) => path.replace(/^\/api/, ''),
         },
       },
     },

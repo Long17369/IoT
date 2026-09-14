@@ -13,7 +13,7 @@ const router = createRouter({
       path: '/control',
       name: 'StorageControl',
       component: () => import('@/views/StorageControl.vue'),
-      meta: { title: '储运舱控制' },
+      meta: { title: '系统控制' },
     },
     {
       path: '/data/overview',

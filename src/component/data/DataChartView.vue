@@ -11,7 +11,7 @@ import {
 } from 'element-plus'
 import DataChart from './DataChart.vue'
 import { getDataDevices, getChartData, getDataMapper } from '@/server/api'
-import type { Data, FieldMapper } from '@/server/types'
+import type { ChartPoint, FieldMapper } from '@/server/types'
 import type { ColumnDef } from '@/types/dataType'
 
 // 快捷时间范围（分钟）
@@ -47,7 +47,7 @@ const customRange = ref<[Date, Date] | null>(null)
 const loading = ref(false)
 const activeView = ref<'combined' | 'solo'>('combined')
 
-const rawData = ref<Data[]>([])
+const rawData = ref<ChartPoint[]>([])
 const fieldMappers = ref<FieldMapper[]>([])
 
 const chartData = computed<Record<string, unknown>[]>(
@@ -110,7 +110,7 @@ const currentSoloGroup = computed(() => soloGroups.value[currentSoloPage.value -
 
 onMounted(async () => {
   try {
-    fieldMappers.value = await getDataMapper('data')
+    fieldMappers.value = await getDataMapper('sensor')
   } catch (e) {
     console.error('获取字段映射失败:', e)
   }

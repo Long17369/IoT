@@ -61,7 +61,7 @@ const menuItems: MenuList = [
   },
   {
     index: '/control',
-    label: '储运控制',
+    label: '系统控制',
     type: 'item',
     icon: Setting,
   },
