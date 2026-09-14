@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { ElSelect, ElOption, ElMessage } from 'element-plus'
+import { ArrowDown, ArrowRight } from '@element-plus/icons-vue'
 import ControlSwitch from './ControlSwitch.vue'
 import ControlSlider from './ControlSlider.vue'
 import { updateDirectData } from '@/server/api'
@@ -226,6 +227,84 @@ function parseOptionValue(opt: string): { label: string; value: string }[] {
       : { label: item, value: item }
   })
 }
+
+// ========== 按父级分组折叠 ==========
+
+/** 折叠状态存 localStorage（只记录被折叠的分组，默认全展开） */
+const COLLAPSE_KEY = 'iot:control-panel:collapsed'
+
+function loadCollapsed(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(COLLAPSE_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
+  } catch {
+    return {}
+  }
+}
+
+const collapsedGroups = ref<Record<string, boolean>>(loadCollapsed())
+
+/** 有可见子项的父项才显示折叠箭头（子项全被父项条件隐藏时，展开也是空的） */
+const toggleableIds = computed(() => {
+  const ids = new Set<string>()
+  for (const config of visibleConfigs.value) {
+    if (config.ref_id) ids.add(config.ref_id)
+  }
+  return ids
+})
+
+/** 该项当前是否有可展开的子配置 */
+function hasChildren(configId: string): boolean {
+  return toggleableIds.value.has(configId)
+}
+
+/** 祖先层级深度，用于子项缩进 */
+function depthOf(config: DirectConfig): number {
+  let depth = 0
+  let current = config
+  const seen = new Set<string>()
+  while (current.ref_id && !seen.has(current.id)) {
+    seen.add(current.id)
+    const parent = configMap.value.get(current.ref_id)
+    if (!parent) break
+    depth += 1
+    current = parent
+  }
+  return depth
+}
+
+/** 祖先里只要有被折叠的分组，本行就不渲染 */
+function isHiddenByCollapse(config: DirectConfig): boolean {
+  let current = config
+  const seen = new Set<string>()
+  while (current.ref_id && !seen.has(current.id)) {
+    seen.add(current.id)
+    if (collapsedGroups.value[current.ref_id]) return true
+    const parent = configMap.value.get(current.ref_id)
+    if (!parent) break
+    current = parent
+  }
+  return false
+}
+
+function isExpanded(configId: string): boolean {
+  return !collapsedGroups.value[configId]
+}
+
+function toggleGroup(configId: string) {
+  const next = { ...collapsedGroups.value }
+  if (next[configId]) delete next[configId]
+  else next[configId] = true
+  collapsedGroups.value = next
+  try {
+    localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next))
+  } catch {
+    // 存储不可用（隐私模式等）时仅本次会话生效
+  }
+}
+
+/** 实际渲染的行：可见配置去掉被折叠分组里的项 */
+const renderConfigs = computed(() => visibleConfigs.value.filter((c) => !isHiddenByCollapse(c)))
 </script>
 
 <template>
@@ -233,7 +312,27 @@ function parseOptionValue(opt: string): { label: string; value: string }[] {
     <div v-if="visibleConfigs.length === 0" class="empty-hint">暂无可用控制项</div>
 
     <TransitionGroup name="control-list" tag="div">
-      <template v-for="config in visibleConfigs" :key="config.id">
+      <div
+        v-for="config in renderConfigs"
+        :key="config.id"
+        class="control-row"
+        :class="{ 'is-child': depthOf(config) > 0 }"
+        :style="{ '--depth': depthOf(config) }"
+      >
+        <!-- 挂了子配置的项：左侧箭头折叠/展开子配置（无子项时占位，保证控件对齐） -->
+        <button
+          v-if="hasChildren(config.id)"
+          class="group-toggle"
+          :title="isExpanded(config.id) ? '收起子配置' : '展开子配置'"
+          @click.stop="toggleGroup(config.id)"
+        >
+          <el-icon>
+            <ArrowDown v-if="isExpanded(config.id)" />
+            <ArrowRight v-else />
+          </el-icon>
+        </button>
+        <span v-else class="group-toggle group-toggle-placeholder" aria-hidden="true" />
+
         <!-- 开关类型 -->
         <ControlSwitch
           v-if="config.f_type === '1'"
@@ -245,7 +344,6 @@ function parseOptionValue(opt: string): { label: string; value: string }[] {
           @change="(v: boolean) => handleSwitchChange(config, v)"
         />
 
-        <!-- 单选框类型（f_type=5），二选一用开关，多选用下拉 -->
         <!-- 单选框类型（f_type=5），渲染为下拉选择 -->
         <div v-else-if="config.f_type === '5'" class="control-select">
           <span class="input-label">{{ config.t_name }}</span>
@@ -265,6 +363,8 @@ function parseOptionValue(opt: string): { label: string; value: string }[] {
             />
           </ElSelect>
         </div>
+
+        <!-- 滑动条类型 -->
         <ControlSlider
           v-else-if="config.f_type === '3'"
           :label="config.t_name"
@@ -301,7 +401,7 @@ function parseOptionValue(opt: string): { label: string; value: string }[] {
             "
           />
         </div>
-      </template>
+      </div>
     </TransitionGroup>
   </div>
 </template>
@@ -312,6 +412,52 @@ function parseOptionValue(opt: string): { label: string; value: string }[] {
   flex-direction: column;
   gap: 4px;
   overflow: auto;
+}
+
+/* 一行配置：左侧折叠箭头 + 控件（子项按层级缩进） */
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: calc(var(--depth, 0) * 12px);
+}
+
+/* 控件占满剩余宽度；箭头固定宽度不参与拉伸 */
+.control-row > *:not(.group-toggle) {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 子项左侧竖线，直观看出归属关系 */
+.control-row.is-child {
+  border-left: 2px solid #e4e7ed;
+}
+
+.group-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #909399;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* 无子配置时的占位：不响应鼠标，仅占宽度保证控件对齐 */
+.group-toggle-placeholder {
+  cursor: default;
+  pointer-events: none;
+}
+
+.group-toggle:hover {
+  background: #f0f2f5;
+  color: #409eff;
 }
 
 /* 列表过渡动画 */
