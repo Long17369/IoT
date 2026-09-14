@@ -187,9 +187,10 @@ const barData = computed<ChartPoint[]>(() => {
 
 const chartData = computed<Record<string, unknown>[]>(
   () =>
-    (chartMode.value === 'bar'
-      ? barData.value
-      : rawData.value) as unknown as Record<string, unknown>[],
+    (chartMode.value === 'bar' ? barData.value : rawData.value) as unknown as Record<
+      string,
+      unknown
+    >[],
 )
 
 const allColumns = computed<ColumnDef[]>(() => {
