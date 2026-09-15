@@ -26,6 +26,38 @@ const deviceLocks = shallowRef<Map<string, WsLock>>(new Map())
 // direct(config_id='lock') 只带锁定标志，拿不到锁类型
 const directLockFlags = shallowRef<Map<string, boolean>>(new Map())
 
+/** 锁类型 → 展示名（契约 LockType：blocked / overpressure / pump_idle / leak） */
+const LOCK_TYPE_LABELS: Record<string, string> = {
+  blocked: '堵塞',
+  overpressure: '过压保护',
+  pump_idle: '水泵空转',
+  leak: '泄漏',
+}
+
+/** 锁原因码 → 展示名；后端也可能直接给中文描述，没命中就原样显示 */
+const LOCK_REASON_LABELS: Record<string, string> = {
+  pressure_zero: '压力归零',
+  flow_zero: '流量归零',
+  flow_unchanged: '累计流量无变化',
+  temp_anomaly: '温度异常',
+  overpressure: '压力过高',
+  pump_idle: '水泵空转',
+  leak: '泄漏',
+  sensor_offline: '设备离线',
+  sensor_spike: '数据跳变',
+}
+
+/** 把 WsLock 拼成可读文本，如 '堵塞（压力归零）'；未锁定返回空串 */
+function describeLock(lock: WsLock | undefined): string {
+  if (!lock?.locked) return ''
+  const active = Array.isArray(lock.active) ? lock.active : []
+  const types = active.map((type) => LOCK_TYPE_LABELS[type] ?? type)
+  if (lock.type && !active.includes(lock.type)) types.push(LOCK_TYPE_LABELS[lock.type] ?? lock.type)
+  const reason = lock.reason ? (LOCK_REASON_LABELS[lock.reason] ?? lock.reason) : ''
+  const base = types.length > 0 ? types.join(' · ') : '已锁定'
+  return reason && reason !== base ? `${base}（${reason}）` : base
+}
+
 let ws: WebSocket | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 // 连接身份 token（后端欢迎消息下发；重连时回传以复用同一身份/定向补推）
@@ -202,14 +234,9 @@ export function useWebSocket() {
     return directLockFlags.value.get(d_no) === true
   }
 
-  /**
-   * 设备是否处于**堵塞**锁（复位按钮的显示条件）：
-   * lock 事件的 active 含 'blocked'；没有锁详情时按锁定标志兜底。
-   */
-  function isDeviceBlocked(d_no: string): boolean {
-    const lock = deviceLocks.value.get(d_no)
-    if (lock) return lock.active.includes('blocked')
-    return directLockFlags.value.get(d_no) === true
+  /** 锁状态的可读文本，如 '堵塞（压力归零）'；未锁定/无信息时返回空串 */
+  function describeDeviceLock(d_no: string): string {
+    return describeLock(deviceLocks.value.get(d_no))
   }
 
   return {
@@ -225,7 +252,7 @@ export function useWebSocket() {
     getRecentRecords: (d_no: string) => recentRecords.value.get(d_no) ?? [],
     getDeviceLock,
     isDeviceLocked,
-    isDeviceBlocked,
+    describeDeviceLock,
     clearAlarms,
     clearDeviceAlarms,
     clearDeviceLock,

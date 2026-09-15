@@ -17,7 +17,7 @@ import type { DirectConfig, Direct } from '@/server/types'
 type ControlTarget = 'heat' | 'water'
 type ControlAction = 'on' | 'off'
 
-const { clearDeviceAlarms, directUpdates, isDeviceBlocked } = useWebSocket()
+const { clearDeviceAlarms, directUpdates, isDeviceLocked, describeDeviceLock } = useWebSocket()
 
 const devices = ref<string[]>([])
 const selectedDevice = ref('')
@@ -27,10 +27,14 @@ const loading = ref(false)
 const sending = ref(false)
 
 /**
- * 设备是否处于堵塞锁定（复位按钮显示条件）：
- * lock 事件的 active 含 'blocked'，或收到 config_id='lock' 的锁定通知。
+ * 设备是否处于保护锁定（复位按钮的显示条件）。
+ * 完全由后端 WS `lock` 事件驱动（locked/active 由后端 device_locks 决定）。
  */
-const isBlocked = computed(() => !!selectedDevice.value && isDeviceBlocked(selectedDevice.value))
+const isLocked = computed(() => !!selectedDevice.value && isDeviceLocked(selectedDevice.value))
+/** 当前锁的可读描述，如 '堵塞（压力归零）' */
+const lockText = computed(() =>
+  selectedDevice.value ? describeDeviceLock(selectedDevice.value) : '',
+)
 
 onMounted(async () => {
   try {
@@ -78,17 +82,17 @@ async function sendCommand(target: ControlTarget, action: ControlAction) {
   }
 }
 
-/** 手动复位堵塞状态：清除持久化标记 + 本地预警横幅 + 刷新面板 */
-async function onResetBlock() {
+/** 复位：释放后端保护锁 + 按快照恢复运行（锁状态由 WS lock 事件回推，不在这里改本地状态） */
+async function onResetLock() {
   if (!selectedDevice.value) return
   sending.value = true
   try {
     await resetDeviceBlock(selectedDevice.value)
     clearDeviceAlarms(selectedDevice.value) // 本地兜底清除横幅（WS reset 也会触发）
-    await onControlUpdated() // 刷新后 blocked 变 '0'，复位按钮消失
-    console.log('堵塞状态已复位:', selectedDevice.value)
+    await onControlUpdated()
+    console.log('保护锁已复位:', selectedDevice.value)
   } catch (e) {
-    console.error('复位堵塞状态失败:', e)
+    console.error('复位失败:', e)
   } finally {
     sending.value = false
   }
@@ -181,10 +185,11 @@ onBeforeUnmount(() => {
           <el-button type="danger" :disabled="sending" @click="sendCommand('water', 'off')">
             水泵关
           </el-button>
-          <!-- 手动复位：设备处于堵塞锁定时显示 -->
-          <el-button v-if="isBlocked" type="success" :disabled="sending" @click="onResetBlock">
+          <!-- 复位：设备被保护锁定时显示（由 WS lock 事件驱动），释放锁并按快照恢复 -->
+          <el-button v-if="isLocked" type="success" :disabled="sending" @click="onResetLock">
             复位
           </el-button>
+          <span v-if="isLocked && lockText" class="lock-hint">已锁定：{{ lockText }}</span>
         </div>
       </div>
 
@@ -305,5 +310,12 @@ onBeforeUnmount(() => {
   color: #f56c6c;
   font-size: 13px;
   text-align: center;
+}
+
+/* 锁定提示：跟着 WS lock 事件显示当前锁类型/原因 */
+.lock-hint {
+  margin-left: 8px;
+  font-size: 13px;
+  color: #e6a23c;
 }
 </style>
