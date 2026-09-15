@@ -92,10 +92,14 @@ function bucketStep(window: { start: Date; end: Date }, buckets: number): number
   return Math.max(1000, Math.ceil(span / buckets / 1000) * 1000)
 }
 
+/** 相邻数据点间隔超过这么多个桶，才认为"真的缺数据"（否则视为采样抖动，直接连线） */
+const GAP_STEPS = 3
+
 /**
- * 后端 /chart 只返回「有数据的桶」，缺数据的时间段会在图上直接消失（横轴被压缩、
- * 曲线还会跨过缺口连起来）。这里按请求的桶数把缺失的时间桶补成 null 行：
- * 折线在缺数据处断成缺口，横轴保持完整时间跨度。
+ * 后端 /chart 只返回「有数据的桶」。这里补空行只为两件事：
+ * 1. 首尾空档 → 横轴覆盖整个时间窗（否则缺数据的时间段会从横轴上消失）；
+ * 2. 长缺口（间隔 > GAP_STEPS 个桶）→ 折线在此断开，能看出真的没数据。
+ * 采样抖动（隔一两个桶没有数据）不补空行，避免折线被切成一小段一小段。
  */
 function padMissingBuckets(
   rows: ChartPoint[],
@@ -105,22 +109,45 @@ function padMissingBuckets(
   if (rows.length === 0) return []
   const startMs = window.start.getTime()
   const step = bucketStep(window, buckets)
+  // 实际桶数 = 时间跨度 / 步长（与后端一致：请求的 buckets 只是"期望点数"）
+  const slots = Math.floor((window.end.getTime() - startMs) / step) + 1
+
   const keys = new Set<string>()
   for (const row of rows) {
     for (const key of Object.keys(row)) if (key !== 'c_time') keys.add(key)
   }
-  const filled: ChartPoint[] = Array.from({ length: buckets }, (_, idx) => {
+  const emptyRow = (idx: number): ChartPoint => {
     const row: ChartPoint = { c_time: fmt(new Date(startMs + idx * step)) }
     for (const key of keys) row[key] = null
     return row
-  })
+  }
+
+  const byIndex = new Map<number, ChartPoint>()
   for (const row of rows) {
     const t = parseTime(row.c_time)
     if (!Number.isFinite(t)) continue
-    const idx = Math.min(buckets - 1, Math.max(0, Math.floor((t - startMs) / step)))
-    filled[idx] = row
+    const idx = Math.min(slots - 1, Math.max(0, Math.floor((t - startMs) / step)))
+    byIndex.set(idx, row)
   }
-  return filled
+
+  const indexes = [...byIndex.keys()].sort((a, b) => a - b)
+  const firstIndex = indexes[0] ?? 0
+  const lastIndex = indexes[indexes.length - 1] ?? 0
+  const padded: ChartPoint[] = []
+  // 首部空档
+  for (let idx = 0; idx < firstIndex; idx++) padded.push(emptyRow(idx))
+  indexes.forEach((idx, order) => {
+    padded.push(byIndex.get(idx) as ChartPoint)
+    const next = indexes[order + 1]
+    if (next === undefined) return
+    // 长缺口：补空行让折线断开；小抖动：不补，保持连线
+    if (next - idx > GAP_STEPS) {
+      for (let i = idx + 1; i < next; i++) padded.push(emptyRow(i))
+    }
+  })
+  // 尾部空档
+  for (let idx = lastIndex + 1; idx < slots; idx++) padded.push(emptyRow(idx))
+  return padded
 }
 
 /**
