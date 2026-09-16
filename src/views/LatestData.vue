@@ -11,8 +11,9 @@ import type { CardField, ColumnDef } from '@/types/dataType'
 
 const fieldMappers = ref<FieldMapper[]>([])
 
-// 图表展示最近 N 条实时数据（数据来自 WebSocket 后台缓存）
-const MAX_CHART_POINTS = 10
+// 图表可展示的"最新点数"选项（WS 后台缓存上限 50 条，见 useWebSocket 的 MAX_RECENT_RECORDS）
+const POINT_OPTIONS = [5, 10, 20, 30, 50]
+const pointCount = ref(10)
 
 // WebSocket 实时数据（模块级缓存：切页面不销毁，后台持续更新）
 const { latestSensorData, recentRecords, isOffline } = useWebSocket()
@@ -32,7 +33,7 @@ const latestRecord = computed<Data | null>(() => {
 const chartRecords = computed<Data[]>(() => {
   if (!selectedDevice.value) return []
   const list = recentRecords.value.get(selectedDevice.value) ?? []
-  return list.slice(-MAX_CHART_POINTS).map(toDataRecord)
+  return list.slice(-pointCount.value).map(toDataRecord)
 })
 
 onMounted(async () => {
@@ -156,10 +157,18 @@ function toDataRecord(wsData: WsData): Data {
       </DataCard>
     </div>
     <div class="chart-section">
-      <h3>
-        <ElIcon><TrendCharts /></ElIcon>
-        最近10条数据趋势
-      </h3>
+      <div class="chart-header">
+        <h3>
+          <ElIcon><TrendCharts /></ElIcon>
+          最近{{ pointCount }}条数据趋势
+        </h3>
+        <div class="point-count">
+          <span class="point-count-label">显示点数：</span>
+          <ElSelect v-model="pointCount" size="small" style="width: 96px">
+            <ElOption v-for="n in POINT_OPTIONS" :key="n" :label="`${n} 条`" :value="n" />
+          </ElSelect>
+        </div>
+      </div>
       <div v-if="chartRecords.length === 0" class="empty-state">暂无数据</div>
       <div v-else class="chart-container">
         <DataChart
@@ -228,6 +237,26 @@ function toDataRecord(wsData: WsData): Data {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.point-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.point-count-label {
+  font-size: 13px;
+  color: #909399;
+  white-space: nowrap;
 }
 
 .chart-container {
