@@ -35,6 +35,12 @@ const props = defineProps<{
   dualYAxis?: boolean
   /** X轴时间格式：'ms'=MM:SS（默认）；'full'=按跨度自适应完整时间 */
   xTimeFormat?: 'ms' | 'full'
+  /**
+   * Y轴分组模式（默认 'auto'）：
+   * - 'auto'：按列定义顺序分半（前一半左轴、后一半右轴），同单位合并单轴
+   * - 'temp-flow'：固定分组——左轴温度类（单位 °C / °C/min），右轴水压与流量（kPa / L / L/min）
+   */
+  axisPreset?: 'auto' | 'temp-flow'
 }>()
 
 const chartColumns = computed(() => props.columns.filter((c) => c.chartable))
@@ -98,6 +104,22 @@ function round2(v: number): number {
 
 /** Y 轴刻度格式化：最多保留 2 位小数，避免超长小数（包装 fmtNum 防止 ECharts 传入 index 作为 maxDigits） */
 const fmtTick = (v: number | string) => fmtNum(v, 2)
+
+/**
+ * axisPreset='temp-flow' 时的轴归属：0=左轴（温度类），1=右轴（水压与流量）。
+ * 按单位判断，避免依赖具体字段名；未识别的单位归左轴。
+ */
+function axisSideOf(col: ColumnDef): 0 | 1 {
+  const unit = (col.unit ?? '').trim()
+  if (unit.includes('°C')) return 0 // 温度 °C、加热速度 °C/min
+  if (unit === 'kPa' || unit === 'L' || unit === 'L/min') return 1 // 水压、流量
+  return 0
+}
+
+/** 预设模式下轴名用该轴包含的单位拼（如 '°C / °C/min'、'kPa / L/min'） */
+function axisUnitsLabel(cols: ColumnDef[]): string {
+  return [...new Set(cols.map((c) => (c.unit ?? '').trim()).filter(Boolean))].join(' / ')
+}
 
 /**
  * 计算 Y 轴范围：折线模式下基于数据自适应 min/max 并加 10% padding，
@@ -223,7 +245,14 @@ const lineBarOption = computed(() => {
   // 是否使用单Y轴：未开启双轴、只有 1 个指标、或所有指标同单位。
   // 同单位合并到同一轴，配合下方 Y 轴自适应上下限，能让细微波动清晰可见。
   const allSameUnit = cols.every((c) => c.unit === cols[0]?.unit)
-  const useSingleAxis = !props.dualYAxis || cols.length === 1 || allSameUnit
+  const usePreset = props.axisPreset === 'temp-flow'
+  // 预设分组：左轴温度类，右轴水压与流量；某一侧为空时退回单轴
+  const presetLeft = usePreset ? cols.filter((c) => axisSideOf(c) === 0) : []
+  const presetRight = usePreset ? cols.filter((c) => axisSideOf(c) === 1) : []
+  const useSingleAxis = usePreset
+    ? presetLeft.length === 0 || presetRight.length === 0
+    : !props.dualYAxis || cols.length === 1 || allSameUnit
+  const singleAxisCols = usePreset ? (presetLeft.length > 0 ? presetLeft : presetRight) : cols
 
   if (useSingleAxis) {
     return {
@@ -233,20 +262,28 @@ const lineBarOption = computed(() => {
       yAxis: [
         {
           type: 'value',
-          name: cols[0]?.unit || '',
+          name: usePreset ? axisUnitsLabel(singleAxisCols) : (cols[0]?.unit || ''),
           axisLabel: { formatter: fmtTick },
-          ...axisRange(cols),
+          ...axisRange(singleAxisCols),
         },
       ],
-      series: cols.map((col) => mkSeries(col, 0)),
+      series: singleAxisCols.map((col) => mkSeries(col, 0)),
     }
   }
 
-  // 双Y轴：按列定义顺序稳定分组（前一半左轴、后一半右轴），
-  // 不再按动态平均值排序，避免实时数据更新导致指标在左右轴之间跳动、颜色错乱
+  // 双Y轴：默认按列定义顺序稳定分组（前一半左轴、后一半右轴），
+  // 不再按动态平均值排序，避免实时数据更新导致指标在左右轴之间跳动、颜色错乱；
+  // axisPreset='temp-flow' 时改为固定分组：左温度、右水压+流量
   const midIndex = Math.ceil(cols.length / 2)
-  const leftCols = cols.slice(0, midIndex)
-  const rightCols = cols.slice(midIndex)
+  const leftCols = usePreset ? presetLeft : cols.slice(0, midIndex)
+  const rightCols = usePreset ? presetRight : cols.slice(midIndex)
+
+  const leftAxisName = usePreset
+    ? axisUnitsLabel(leftCols)
+    : leftCols[0]
+      ? columnLabel(leftCols[0])
+      : ''
+  const rightAxisName = usePreset ? axisUnitsLabel(rightCols) : columnLabel(rightCols[0]!)
 
   const series: Record<string, unknown>[] = [
     ...leftCols.map((col) => mkSeries(col, 0)),
@@ -256,7 +293,7 @@ const lineBarOption = computed(() => {
   const yAxis: Record<string, unknown>[] = [
     {
       type: 'value',
-      name: leftCols[0] ? columnLabel(leftCols[0]) : '',
+      name: leftAxisName,
       position: 'left',
       axisLine: { show: true, lineStyle: { color: '#5470c6' } },
       axisLabel: { color: '#5470c6', formatter: fmtTick },
@@ -266,7 +303,7 @@ const lineBarOption = computed(() => {
   if (rightCols.length > 0) {
     yAxis.push({
       type: 'value',
-      name: columnLabel(rightCols[0]!),
+      name: rightAxisName,
       position: 'right',
       axisLine: { show: true, lineStyle: { color: '#91cc75' } },
       axisLabel: { color: '#91cc75', formatter: fmtTick },

@@ -168,6 +168,7 @@ function toDataRecord(wsData: WsData): Data {
           mode="line"
           x-axis-key="c_time"
           :dual-y-axis="true"
+          axis-preset="temp-flow"
         />
       </div>
     </div>
