@@ -213,11 +213,46 @@ watch([() => props.configs, () => props.directValues], () => {
   visibilityCache.clear()
 })
 
+/** order 排序用数值：后端用了小数（如 11.5 / 15.5 / 24.8），用 parseInt 会把它们归成同号 */
+function orderOf(config: DirectConfig): number {
+  const value = Number.parseFloat(config.order ?? '')
+  return Number.isFinite(value) ? value : 0
+}
+
 const visibleConfigs = computed(() =>
-  props.configs
-    .filter(isConfigVisible)
-    .sort((a, b) => (parseInt(a.order ?? '0', 10) || 0) - (parseInt(b.order ?? '0', 10) || 0)),
+  props.configs.filter(isConfigVisible).sort((a, b) => orderOf(a) - orderOf(b)),
 )
+
+/**
+ * 按层级深度优先排列：父项后面紧跟它的子项（同级内再按 order）。
+ * 不能只把全部项按 order 平铺——后端存在子项 order 比父项小的情况
+ * （如 flow_rate_zero order=11 挂在 pump_idle_enabled order=11.5 下），
+ * 那样子项会显示在父项上方，收起父项时它会在别处消失。
+ */
+const orderedConfigs = computed<DirectConfig[]>(() => {
+  const childrenOf = new Map<string, DirectConfig[]>()
+  const roots: DirectConfig[] = []
+  for (const config of visibleConfigs.value) {
+    const parentId = config.ref_id
+    if (parentId && configMap.value.has(parentId)) {
+      const list = childrenOf.get(parentId) ?? []
+      list.push(config)
+      childrenOf.set(parentId, list)
+    } else {
+      roots.push(config)
+    }
+  }
+  const result: DirectConfig[] = []
+  const walk = (configs: DirectConfig[]) => {
+    for (const config of configs) {
+      result.push(config)
+      const children = childrenOf.get(config.id)
+      if (children?.length) walk(children)
+    }
+  }
+  walk(roots)
+  return result
+})
 
 function parseOptionValue(opt: string): { label: string; value: string }[] {
   return opt.split('|').map((item) => {
@@ -303,8 +338,8 @@ function toggleGroup(configId: string) {
   }
 }
 
-/** 实际渲染的行：可见配置去掉被折叠分组里的项 */
-const renderConfigs = computed(() => visibleConfigs.value.filter((c) => !isHiddenByCollapse(c)))
+/** 实际渲染的行：按层级排好序后去掉被折叠分组里的项 */
+const renderConfigs = computed(() => orderedConfigs.value.filter((c) => !isHiddenByCollapse(c)))
 </script>
 
 <template>
