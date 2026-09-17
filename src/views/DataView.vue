@@ -228,6 +228,7 @@ function identify() {
               :data="rawData"
               :columns="columns"
               :selectable="true"
+              empty-text="离线"
               @sort-change="onSortChange"
             />
           </div>

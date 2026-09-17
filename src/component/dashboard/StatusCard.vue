@@ -4,21 +4,32 @@ import { fmtNum } from '@/utils/format'
 
 interface Props {
   title: string
-  value: string | number
+  value: string | number | null | undefined
   unit?: string
   trend?: 'up' | 'down' | 'stable' | 'right'
   /** 状态: normal=正常, warning=警告, danger=危险 */
   status?: 'normal' | 'warning' | 'danger'
+  /** 值为空（null / undefined / 空串）时显示的占位文本，默认空白 */
+  emptyText?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   unit: '',
   trend: 'stable',
   status: 'normal',
+  emptyText: '',
 })
 
-/** 显示值：超 2 位小数截断（整数/短小数/非数值原样） */
-const displayValue = computed(() => fmtNum(props.value))
+/** 空值（缺测：库中 NULL / 推送空串）判定 */
+const isEmpty = computed(
+  () => props.value === null || props.value === undefined || props.value === '',
+)
+
+/** 显示值：空值显示占位文本；超 2 位小数截断（整数/短小数/非数值原样） */
+const displayValue = computed(() => (isEmpty.value ? props.emptyText : fmtNum(props.value)))
+
+/** 空值不显示单位，避免出现「离线 °C」 */
+const showUnit = computed(() => !!props.unit && !isEmpty.value)
 
 const trendIcon = computed(() => {
   switch (props.trend) {
@@ -55,7 +66,7 @@ const statusColor = computed(() => {
     </div>
     <div class="card-body">
       <span class="card-value" :style="{ color: statusColor }">{{ displayValue }}</span>
-      <span v-if="unit" class="card-unit">{{ unit }}</span>
+      <span v-if="showUnit" class="card-unit">{{ unit }}</span>
     </div>
   </div>
 </template>
