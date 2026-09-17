@@ -29,6 +29,9 @@ function fmt(val: unknown, field: CardField): string {
   if (field.format === 'datetime' || field.key === 'c_time')
     return isEmpty(val) ? props.emptyText : fmtServerTime(val)
   if (isEmpty(val)) return props.emptyText
+  // 值映射（由字段映射 mapper 驱动）
+  const mapped = field.mapper?.[String(val)]
+  if (mapped !== undefined) return mapped
   const v = fmtNum(val)
   return field.unit ? `${v}${field.unit}` : v
 }

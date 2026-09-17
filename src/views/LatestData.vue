@@ -15,6 +15,9 @@ const fieldMappers = ref<FieldMapper[]>([])
 const POINT_OPTIONS = [5, 10, 20, 30, 50]
 const pointCount = ref(10)
 
+// 卡片额外展示的开关类字段（后端字段映射里 visible=0，只在实时数据卡片上展示）
+const CARD_SWITCH_KEYS = ['field3', 'field4']
+
 // WebSocket 实时数据（模块级缓存：切页面不销毁，后台持续更新）
 const { latestSensorData, recentRecords, isOffline } = useWebSocket()
 
@@ -53,7 +56,9 @@ const cardFields = computed<CardField[]>(() => {
     { key: 'c_time', label: '更新时间', section: 'footer', format: 'datetime' },
   ]
 
-  const sorted = fieldMappers.value.filter((m) => m.visible === '1').sort((a, b) => a.id - b.id)
+  const sorted = fieldMappers.value
+    .filter((m) => m.visible === '1' || CARD_SWITCH_KEYS.includes(m.db_name))
+    .sort((a, b) => a.id - b.id)
 
   for (const m of sorted) {
     fields.push({
@@ -62,6 +67,8 @@ const cardFields = computed<CardField[]>(() => {
       unit: m.unit || undefined,
       section: 'body',
       tag: true,
+      // 该字段声明了词表 → 值映射为显示名（如 0→关 / 1→开）
+      ...(m.mapping ? { mapper: parseMapping(m.mapping) } : {}),
     })
   }
 
@@ -95,6 +102,17 @@ async function loadMappers() {
     fieldMappers.value = await getDataMapper('sensor')
   } catch (err) {
     console.error('获取字段映射失败:', err)
+  }
+}
+
+/** 解析后端下发的映射词表（JSON：值 -> 显示名）；无效 JSON 按无映射处理 */
+function parseMapping(mapping: string): Record<string, string> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(mapping)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+    return parsed as Record<string, string>
+  } catch {
+    return undefined
   }
 }
 
