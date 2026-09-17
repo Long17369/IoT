@@ -33,7 +33,7 @@ const FETCH_BUCKETS = 1000
 // 柱状图的目标柱数：受图宽限制，由前端在已取到的数据上聚合（双序列图柱子成对并排，按“序列数×柱数”估算宽度）
 const BAR_BUCKETS = 60
 
-// 组合图表：3 张表（温度1+2、累计流量、瞬时流量+压力）
+// 组合图表：4 张表（温度1+2、累计流量、瞬时流量+压力、水泵+加热运行时长）
 const COMBINED_GROUPS = [
   { key: 'temp', label: '温度曲线', cols: ['field1', 'field2'], dualY: true },
   { key: 'flow_total', label: '累计流量', cols: ['field5'], dualY: false },
@@ -43,9 +43,10 @@ const COMBINED_GROUPS = [
     cols: ['field6', 'field7'],
     dualY: true,
   },
+  { key: 'runtime', label: '运行时长', cols: ['field8', 'field9'], dualY: false },
 ]
-// 单数据图表：5 张全部分开（加热/水泵不做）
-const SOLO_KEYS = ['field1', 'field2', 'field5', 'field6', 'field7']
+// 单数据图表：7 张全部分开（加热/水泵不做）
+const SOLO_KEYS = ['field1', 'field2', 'field5', 'field6', 'field7', 'field8', 'field9']
 
 const devices = ref<string[]>([])
 const selectedDevice = ref('')
@@ -221,13 +222,18 @@ const chartData = computed<Record<string, unknown>[]>(
     >[],
 )
 
+/**
+ * 图表可选列：只认「可图表化」标记（`chartable`）。
+ * `visible` 管的是表格列的显隐，与能否画图无关——被它过滤会让
+ * 「不可见于表格但可图表化」的字段（如流量总计）在子图里变成"暂无数据"。
+ */
 const allColumns = computed<ColumnDef[]>(() => {
-  const sorted = fieldMappers.value.filter((m) => m.visible === '1').sort((a, b) => a.id - b.id)
+  const sorted = fieldMappers.value.filter((m) => m.chartable === '1').sort((a, b) => a.id - b.id)
   return sorted.map((m) => ({
     key: m.db_name,
     label: m.f_name,
     unit: m.unit || undefined,
-    chartable: m.chartable === '1',
+    chartable: true,
   }))
 })
 
