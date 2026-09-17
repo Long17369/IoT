@@ -12,6 +12,8 @@ import type {
   FrontendDataQueryParams,
   Where,
   DataSourceName,
+  FlowTotal,
+  FlowResetResult,
 } from './types'
 
 /**
@@ -131,16 +133,16 @@ export async function getCount(source: string, where: Where = {}): Promise<DataC
  * 获取数据时间范围
  * @param source 数据源名：sensor / behavior / error / control（'data' 暂时指向 sensor）
  * @param where 查询条件
- * @returns Promise<{ minTime: string; maxTime: string }>（两者均为 ISO 8601 UTC）
+ * @returns Promise<{ minTime: Date | null; maxTime: Date | null }>（JSON 出网时为 ISO 8601 字符串）
  */
 export async function getTimeRange(
   source: string,
   where: Where = {},
-): Promise<{ minTime: string; maxTime: string }> {
+): Promise<{ minTime: Date | null; maxTime: Date | null }> {
   const queryString = new URLSearchParams({
     where: JSON.stringify(where),
   })
-  return fetchApi<{ minTime: string; maxTime: string }>(
+  return fetchApi<{ minTime: Date | null; maxTime: Date | null }>(
     `${API_BASE}/${resolveSource(source)}/time-range?${queryString}`,
   )
 }
@@ -151,8 +153,8 @@ export async function getTimeRange(
  * 与旧契约同名同参（旧路径 `/api/data/chart` 的 `data` 由 'data'→'sensor' 重定向兼容），
  * 新增可选 `source`（sensor / behavior / error / control，默认 sensor）。
  *
- * @param params d_no / start / end / buckets / source（start/end 为 ISO 8601 UTC）
- * @returns Promise<ChartPoint[]>（`c_time` 为 ISO 8601 UTC + 各数据列桶内平均值，按时间升序）
+ * @param params d_no / start / end / buckets / source
+ * @returns Promise<ChartPoint[]>（`c_time` + 各数据列桶内平均值，按时间升序）
  */
 export const getChartData = (params: ChartQueryParams): Promise<ChartPoint[]> => {
   const queryString = new URLSearchParams({
@@ -227,6 +229,31 @@ export const sendControlCommand = (
  */
 export const resetDeviceBlock = (d_no: string) => {
   return fetchApi<{ message: string }>(`${API_BASE}/control/reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ d_no }),
+  })
+}
+
+/**
+ * 查询设备流量总计（L）：后端按 `sensor_data` 落库帧的瞬时流量积分得到
+ * @param d_no 设备编号
+ * @param start 起算时刻 'YYYY-MM-DD HH:mm:ss'（不传 = 从该设备最早的落库时刻起算）
+ * @param end 截止时刻（不传 = 算到最新的落库时刻）
+ */
+export const getFlowTotal = (d_no: string, start?: string, end?: string) => {
+  const query = new URLSearchParams({ d_no })
+  if (start !== undefined && start !== '') query.set('start', start)
+  if (end !== undefined && end !== '') query.set('end', end)
+  return fetchApi<FlowTotal>(`${API_BASE}/sensor/flow/total?${query.toString()}`)
+}
+
+/**
+ * 清零设备累计流量（内存累计态 + 最新落库帧一起归零，清零后从 0 重新累加）
+ * @param d_no 设备编号
+ */
+export const resetFlow = (d_no: string) => {
+  return fetchApi<FlowResetResult>(`${API_BASE}/sensor/flow/reset`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ d_no }),
