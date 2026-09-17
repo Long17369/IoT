@@ -140,6 +140,27 @@ export interface FlowResetResult {
   devices: string[]
 }
 
+/**
+ * 运行时长汇总：按落库帧累计的开关导通时长，单位秒。
+ *
+ * 口径：逐帧判断开关状态（`sensor_data` 里 `heat_Y1` / `water_Y2` 对应的列），
+ * 导通帧计入「与上一帧的间隔」（间隔超过 `sensor.derive.max_gap_seconds` 的段按封顶计入，
+ * 与流量积分同一口径）；开关关闭的帧不计入。
+ * 对应接口：`GET /api/sensor/runtime?d_no&start&end`。
+ */
+export interface RuntimeSummary {
+  /** 设备编号 */
+  d_no: string
+  /** 实际起算时刻（缺省时为该设备最早落库时刻；无数据为 null） */
+  start: Date | null
+  /** 实际截止时刻（缺省时为该设备最新落库时刻；无数据为 null） */
+  end: Date | null
+  /** 水泵累计运行时长（s，字符串保留 2 位小数） */
+  pump: string
+  /** 加热累计运行时长（s，字符串保留 2 位小数） */
+  heat: string
+}
+
 /** WHERE 操作符：按 SQL 占位符形态分四组，类型与运行时校验均由这些常量派生 */
 export const WHERE_OPERATORS_SINGLE_VALUE = [
   '=',
