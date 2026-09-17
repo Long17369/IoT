@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { WarningFilled, Close } from '@element-plus/icons-vue'
 import type { WsAlarm } from '@/server/types'
+import { fmtServerTime } from '@/utils/format'
 
 const props = defineProps<{
   alarms: WsAlarm[]
@@ -68,7 +69,7 @@ function clearAll() {
             >
               {{ alarm.message }}
             </span>
-            <span class="alarm-time">{{ alarm.timestamp }}</span>
+            <span class="alarm-time">{{ fmtServerTime(alarm.timestamp) }}</span>
             <el-icon class="dismiss-btn" @click="dismiss(alarmKey(alarm))">
               <Close />
             </el-icon>

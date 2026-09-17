@@ -39,8 +39,7 @@ function formatTime(val: unknown): string {
   if (!val) return ''
   const d = new Date(val as string)
   if (isNaN(d.getTime())) return String(val)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  return d.toLocaleString()
 }
 
 /** 单元格文本（unitPlacement=cell 或 both 时带单位，header 时不带） */
@@ -83,7 +82,7 @@ const columnWidths = computed(() => {
       const text = cellText(row, col)
       maxDataW = Math.max(maxDataW, charWidth(text))
     }
-    const dataW = maxDataW * 8 + 16
+    const dataW = maxDataW * 8 + 17
     widths[col.key] = Math.max(headerW, dataW, 60)
   }
   return widths

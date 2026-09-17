@@ -115,11 +115,7 @@ function filterValueText(key: string, opt: FilterOption): string {
   if (!val) return ''
   if (opt.type === 'datetimerange') {
     const [s, e] = val as [Date, Date]
-    const fmt = (d: Date) => {
-      const pad = (n: number) => String(n).padStart(2, '0')
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-    }
-    return `${fmt(new Date(s))} ~ ${fmt(new Date(e))}`
+    return `${new Date(s).toLocaleString()} ~ ${new Date(e).toLocaleString()}`
   }
   if (opt.type === 'range') {
     const [min, max] = val as [number, number]

@@ -12,6 +12,7 @@ import {
 } from 'element-plus'
 import DataChart from './DataChart.vue'
 import { getDataDevices, getChartData, getDataMapper } from '@/server/api'
+import { parseServerTime } from '@/utils/format'
 import type { ChartPoint, FieldMapper } from '@/server/types'
 import type { ColumnDef, DisplayMode } from '@/types/dataType'
 
@@ -80,10 +81,10 @@ const rawData = ref<ChartPoint[]>([])
 const loadedWindow = ref<{ start: Date; end: Date } | null>(null)
 const fieldMappers = ref<FieldMapper[]>([])
 
-/** 解析后端时间字符串（'YYYY-MM-DD HH:mm:ss'，按本地时间解析） */
+/** 解析服务端时间（ISO 8601 UTC）→ 毫秒时间戳；解析不了返回 NaN */
 function parseTime(value: unknown): number {
-  const t = new Date(String(value ?? '').replace(' ', 'T')).getTime()
-  return Number.isFinite(t) ? t : NaN
+  const d = parseServerTime(value)
+  return d ? d.getTime() : NaN
 }
 
 /** 时间桶长度(ms)：与后端一致（总时长/桶数，向上取整到秒，最小 1s） */
@@ -117,7 +118,7 @@ function padMissingBuckets(
     for (const key of Object.keys(row)) if (key !== 'c_time') keys.add(key)
   }
   const emptyRow = (idx: number): ChartPoint => {
-    const row: ChartPoint = { c_time: fmt(new Date(startMs + idx * step)) }
+    const row: ChartPoint = { c_time: new Date(startMs + idx * step).toISOString() }
     for (const key of keys) row[key] = null
     return row
   }
@@ -195,7 +196,7 @@ function aggregateToBuckets(
     const bucketSums = sums.get(idx)
     const bucketCounts = counts.get(idx)
     const row: ChartPoint = {
-      c_time: labels.get(idx) ?? fmt(new Date(startMs + idx * step)),
+      c_time: labels.get(idx) ?? new Date(startMs + idx * step).toISOString(),
     }
     columns.forEach((key, i) => {
       const count = bucketCounts?.[i] ?? 0
@@ -304,10 +305,6 @@ function getRange(): { start: Date; end: Date } {
   return { start, end }
 }
 
-const pad = (n: number) => String(n).padStart(2, '0')
-const fmt = (d: Date) =>
-  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-
 async function load() {
   if (!selectedDevice.value) return
   loading.value = true
@@ -315,8 +312,8 @@ async function load() {
     const r = getRange()
     const rows = await getChartData({
       d_no: selectedDevice.value,
-      start: fmt(r.start),
-      end: fmt(r.end),
+      start: r.start.toISOString(),
+      end: r.end.toISOString(),
       buckets: FETCH_BUCKETS,
     })
     // 后端只返回有数据的桶，先补齐空桶再上屏/聚合

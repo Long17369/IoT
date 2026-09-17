@@ -50,7 +50,7 @@ onMounted(async () => {
 const cardFields = computed<CardField[]>(() => {
   const fields: CardField[] = [
     { key: 'd_no', label: '设备编号', section: 'header', tag: false },
-    { key: 'c_time', label: '更新时间', section: 'footer' },
+    { key: 'c_time', label: '更新时间', section: 'footer', format: 'datetime' },
   ]
 
   const sorted = fieldMappers.value.filter((m) => m.visible === '1').sort((a, b) => a.id - b.id)

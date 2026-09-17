@@ -53,4 +53,6 @@ export interface CardField {
   tag?: boolean
   /** 仅 header section 有效：值→Tag type 映射 */
   statusMap?: Record<string, 'success' | 'warning' | 'danger' | 'info' | ''>
+  /** 值格式化方式：'datetime' = 服务端 ISO 时间 → 浏览器本地可读文本 */
+  format?: 'datetime'
 }

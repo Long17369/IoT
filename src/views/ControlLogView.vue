@@ -73,9 +73,9 @@ const queryParams = computed(() => ({
 }))
 
 // 筛选条件
-const whereClause = ref<Record<string, { value: string; operator: '=' | '>' | '<' | '>=' | '<=' }>>(
-  {},
-)
+const whereClause = ref<
+  Record<string, { value: string | Date; operator: '=' | '>' | '<' | '>=' | '<=' }>
+>({})
 
 // 合并所有字段的 mapping 词表为全局映射（词条全局唯一复用）
 const globalMapper = computed<Record<string, string>>(() => {
@@ -164,7 +164,8 @@ async function loadFilterOptions() {
 
 // 应用筛选
 function applyFilters(filters: Record<string, FilterValue>) {
-  const where: Record<string, { value: string; operator: '=' | '>' | '<' | '>=' | '<=' }> = {}
+  const where: Record<string, { value: string | Date; operator: '=' | '>' | '<' | '>=' | '<=' }> =
+    {}
   for (const [key, value] of Object.entries(filters)) {
     if (!value) continue
     const opt = filterOptions.value.find((o) => o.key === key)
@@ -172,22 +173,19 @@ function applyFilters(filters: Record<string, FilterValue>) {
     if (!opt?.type || opt.type === 'select') {
       where[key] = { value: String(value), operator: '=' }
     }
-    // 时间范围
+    // 时间范围（Date 直接进 where，经 JSON.stringify 序列化为 ISO 8601 UTC）
     if (opt?.type === 'datetimerange') {
       const [s, e] = value as [Date, Date]
-      const pad = (n: number) => String(n).padStart(2, '0')
-      const fmt = (d: Date) =>
-        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(where as any)[key] = [
-        { value: fmt(new Date(s)), operator: '>=' },
-        { value: fmt(new Date(e)), operator: '<=' },
+        { value: s, operator: '>=' },
+        { value: e, operator: '<=' },
       ]
     }
     // 数值范围
     if (opt?.type === 'range') {
       const [min, max] = value as [number, number]
-      const conds: { value: string; operator: '>=' | '<=' }[] = []
+      const conds: { value: string | Date; operator: '>=' | '<=' }[] = []
       if (min !== -Infinity) conds.push({ value: String(min), operator: '>=' })
       if (max !== Infinity) conds.push({ value: String(max), operator: '<=' })
       if (conds.length) {

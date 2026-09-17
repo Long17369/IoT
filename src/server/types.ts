@@ -46,10 +46,11 @@ export interface FieldMapper {
 }
 
 // 数据类型
+/** 数据行（服务端出网）：`c_time` 为 ISO 8601 UTC 字符串，展示时本地化 */
 export type Data = {
   id: number
   d_no: string | null
-  c_time: string // ISO 8601 格式
+  c_time: string // ISO 8601 UTC
 } & Record<FieldName, string | null>
 
 /**
@@ -58,6 +59,7 @@ export type Data = {
  * 对应接口：`GET /api/{source}/chart?d_no&start&end&buckets`（旧契约 `/api/data/chart` 的别名见 api.ts）。
  */
 export interface ChartPoint {
+  /** 桶内最大时间，ISO 8601 UTC */
   c_time: string
   [column: string]: string | number | null
 }
@@ -66,9 +68,9 @@ export interface ChartPoint {
 export interface ChartQueryParams {
   /** 设备编号 */
   d_no: string
-  /** 开始时间（含）'YYYY-MM-DD HH:mm:ss' */
+  /** 开始时间（含），ISO 8601 UTC（`Date.toISOString()`） */
   start: string
-  /** 结束时间（含） */
+  /** 结束时间（含），ISO 8601 UTC */
   end: string
   /** 目标桶数（降采样点数），默认 1000 */
   buckets?: number
@@ -155,16 +157,16 @@ export type WhereMultiOperator = (typeof WHERE_OPERATORS_MULTI_VALUE)[number]
 export type WherePairOperator = (typeof WHERE_OPERATORS_PAIR_VALUE)[number]
 export type WhereNoValueOperator = (typeof WHERE_OPERATORS_NO_VALUE)[number]
 
-/** 恰好一个字符串值 */
+/** 恰好一个值：字符串或 Date（Date 经 JSON 序列化为 ISO 8601 UTC） */
 export interface WhereConditionSingle {
   operator: WhereSingleOperator
-  value: string
+  value: string | Date
 }
 
 /** `in` 任意非空个值（单值可写成字符串）；`between` 恰好 2 个 */
 export interface WhereConditionList {
   operator: WhereMultiOperator | WherePairOperator
-  value: string | string[]
+  value: string | string[] | Date | Date[]
 }
 
 /** 不带条件值 */
@@ -260,6 +262,7 @@ export type WsEventType = 'data' | 'alarm' | 'direct' | 'lock'
 // WebSocket 传感器数据推送（新数据结构）
 export interface WsData {
   d_no: string
+  /** 数据时间，ISO 8601 UTC */
   timestamp: string
   wen_du1: string
   wen_du2: string
@@ -279,10 +282,12 @@ export interface WsData {
 // WebSocket 告警推送
 // type: 'alarm' 堵塞/故障预警 | 'error' 错误 | 'reset' 手动复位（清除该设备实时预警）
 export interface WsAlarm {
-  id: string // 预警唯一 ID（基于发生时间生成，用于前端重连去重）
+  /** 预警唯一 ID `alarm_${d_no}_${毫秒时间戳}`（基于发生时间生成，用于前端重连去重） */
+  id: string
   d_no: string
   type: 'alarm' | 'error' | 'reset'
   message: string
+  /** 发生时间，ISO 8601 UTC */
   timestamp: string
   /** 告警事件码（如 pressure_zero / overpressure；由命中组件自行定义） */
   code?: string
@@ -320,6 +325,7 @@ export interface WsLock {
   reason?: string
   /** 限时锁到期时间戳(ms)；长期锁缺省 */
   expiresAt?: number
+  /** 状态变更时间，ISO 8601 UTC */
   timestamp: string
 }
 

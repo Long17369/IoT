@@ -6,6 +6,7 @@ import StatusCard from '@/component/dashboard/StatusCard.vue'
 import { getDataDevices, getDataMapper } from '@/server/api'
 import type { FieldMapper } from '@/server/types'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { fmtServerTime } from '@/utils/format'
 
 const { getDeviceSensorData, isOffline } = useWebSocket()
 
@@ -96,7 +97,7 @@ const sensorData = computed(() => {
       </div>
       <div class="detail-card">
         <span class="detail-label">数据更新时间</span>
-        <span class="detail-value">{{ sensorData?.timestamp ?? '--' }}</span>
+        <span class="detail-value">{{ fmtServerTime(sensorData?.timestamp) || '--' }}</span>
       </div>
     </div>
   </div>

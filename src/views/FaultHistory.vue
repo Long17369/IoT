@@ -110,15 +110,12 @@ function applyFilters() {
     if (opt?.type === 'text') {
       where[key] = { value: `%${String(value)}%`, operator: 'like' }
     }
-    // 时间范围
+    // 时间范围（Date 直接进 where，经 JSON.stringify 序列化为 ISO 8601 UTC）
     if (opt?.type === 'datetimerange') {
       const [s, e] = value as [Date, Date]
-      const pad = (n: number) => String(n).padStart(2, '0')
-      const fmt = (d: Date) =>
-        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
       where[key] = [
-        { value: fmt(new Date(s)), operator: '>=' },
-        { value: fmt(new Date(e)), operator: '<=' },
+        { value: s, operator: '>=' },
+        { value: e, operator: '<=' },
       ]
     }
   }

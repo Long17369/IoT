@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ElTag } from 'element-plus'
-import { fmtNum } from '@/utils/format'
+import { fmtNum, fmtServerTime } from '@/utils/format'
 import type { CardField } from '../../types/dataType'
 
 const props = defineProps<{
@@ -15,6 +15,7 @@ const bodyFields = computed(() => props.fields.filter((f) => !f.section || f.sec
 const footerFields = computed(() => props.fields.filter((f) => f.section === 'footer'))
 
 function fmt(val: unknown, field: CardField): string {
+  if (field.format === 'datetime') return fmtServerTime(val)
   const v = fmtNum(val)
   return field.unit ? `${v}${field.unit}` : v
 }

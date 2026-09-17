@@ -131,7 +131,7 @@ export async function getCount(source: string, where: Where = {}): Promise<DataC
  * 获取数据时间范围
  * @param source 数据源名：sensor / behavior / error / control（'data' 暂时指向 sensor）
  * @param where 查询条件
- * @returns Promise<{ minTime: string; maxTime: string }>
+ * @returns Promise<{ minTime: string; maxTime: string }>（两者均为 ISO 8601 UTC）
  */
 export async function getTimeRange(
   source: string,
@@ -151,8 +151,8 @@ export async function getTimeRange(
  * 与旧契约同名同参（旧路径 `/api/data/chart` 的 `data` 由 'data'→'sensor' 重定向兼容），
  * 新增可选 `source`（sensor / behavior / error / control，默认 sensor）。
  *
- * @param params d_no / start / end / buckets / source
- * @returns Promise<ChartPoint[]>（`c_time` + 各数据列桶内平均值，按时间升序）
+ * @param params d_no / start / end / buckets / source（start/end 为 ISO 8601 UTC）
+ * @returns Promise<ChartPoint[]>（`c_time` 为 ISO 8601 UTC + 各数据列桶内平均值，按时间升序）
  */
 export const getChartData = (params: ChartQueryParams): Promise<ChartPoint[]> => {
   const queryString = new URLSearchParams({

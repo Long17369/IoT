@@ -10,7 +10,7 @@ import {
   GridComponent,
 } from 'echarts/components'
 import VChart from 'vue-echarts'
-import { fmtNum } from '@/utils/format'
+import { fmtNum, parseServerTime } from '@/utils/format'
 import type { ColumnDef, DisplayMode } from '../../types/dataType'
 
 use([
@@ -173,35 +173,27 @@ const lineBarOption = computed(() => {
 
   // 计算时间跨度（xTimeFormat='full' 时按跨度自适应显示）
   const rawTimes = props.data
-    .map((d) => new Date(String(d[xColKey ?? 'c_time'] ?? '').replace(' ', 'T')).getTime())
+    .map((d) => parseServerTime(d[xColKey ?? 'c_time'])?.getTime() ?? NaN)
     .filter((t) => !isNaN(t))
   const spanMs = rawTimes.length > 1 ? Math.max(...rawTimes) - Math.min(...rawTimes) : 0
 
-  // 格式化时间：默认 MM:SS；xTimeFormat='full' 时短范围 HH:MM:SS、长范围 MM-DD HH:MM
+  // 格式化时间（本地时区）：默认 MM:SS；xTimeFormat='full' 时短范围 HH:MM:SS、长范围 MM-DD HH:MM
   const formatTime = (val: unknown): string => {
-    const s = String(val ?? '')
-    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(s)) {
-      const d = new Date(s.replace(' ', 'T'))
-      if (!isNaN(d.getTime())) {
-        if (props.xTimeFormat !== 'full') {
-          const minutes = String(d.getMinutes()).padStart(2, '0')
-          const seconds = String(d.getSeconds()).padStart(2, '0')
-          return `${minutes}:${seconds}`
-        }
-        if (spanMs > 0 && spanMs <= 3600_000) {
-          const hh = String(d.getHours()).padStart(2, '0')
-          const mm = String(d.getMinutes()).padStart(2, '0')
-          const ss = String(d.getSeconds()).padStart(2, '0')
-          return `${hh}:${mm}:${ss}`
-        }
-        const mo = String(d.getMonth() + 1).padStart(2, '0')
-        const day = String(d.getDate()).padStart(2, '0')
-        const hh = String(d.getHours()).padStart(2, '0')
-        const mm = String(d.getMinutes()).padStart(2, '0')
-        return `${mo}-${day} ${hh}:${mm}`
-      }
+    const d = parseServerTime(val)
+    if (!d) return String(val ?? '')
+    if (props.xTimeFormat !== 'full') {
+      return d.toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })
     }
-    return s
+    if (spanMs > 0 && spanMs <= 3600_000) {
+      return d.toLocaleTimeString([], { hour12: false })
+    }
+    return d.toLocaleString([], {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
   }
 
   const xData = xCol
@@ -262,7 +254,7 @@ const lineBarOption = computed(() => {
       yAxis: [
         {
           type: 'value',
-          name: usePreset ? axisUnitsLabel(singleAxisCols) : (cols[0]?.unit || ''),
+          name: usePreset ? axisUnitsLabel(singleAxisCols) : cols[0]?.unit || '',
           axisLabel: { formatter: fmtTick },
           ...axisRange(singleAxisCols),
         },
@@ -342,6 +334,7 @@ const pieOption = computed(() => {
         label: { formatter: '{b}: {c}' },
       },
     ],
+    toolbox: { show: false },
   }
 })
 
