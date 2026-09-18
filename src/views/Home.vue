@@ -81,12 +81,7 @@ const sensorData = computed(() => {
         unit="°C"
         empty-text="离线"
       />
-      <StatusCard
-        title="加热速度"
-        :value="sensorData?.heat_rate"
-        unit="°C/min"
-        empty-text="离线"
-      />
+      <StatusCard title="加热速度" :value="sensorData?.heat_rate" unit="°C/min" empty-text="离线" />
       <StatusCard title="压力" :value="sensorData?.pressure" unit="kPa" empty-text="离线" />
       <StatusCard
         :title="label('field6', '瞬时流量')"
@@ -94,12 +89,7 @@ const sensorData = computed(() => {
         unit="L/min"
         empty-text="离线"
       />
-      <StatusCard
-        title="平均水流"
-        :value="sensorData?.avg_flow"
-        unit="L/min"
-        empty-text="离线"
-      />
+      <StatusCard title="平均水流" :value="sensorData?.avg_flow" unit="L/min" empty-text="离线" />
     </div>
 
     <!-- 当前设备信息 -->
