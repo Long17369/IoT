@@ -43,14 +43,15 @@ export interface FieldMapper {
   visible: '0' | '1' // 0: 不可见, 1: 可见
   chartable: '0' | '1' // 0: 不可图表化, 1: 可图表化
   mapping?: string | null // 值映射词表(JSON)：值->显示名，词条全局唯一复用
+  /** 无效值清单(JSON 数组，如 `[6553.5]`)：上报命中即按缺测处理（前端空值 / 落库 NULL） */
+  invalid_value?: string | null
 }
 
 // 数据类型
-/** 数据行（服务端出网）：`c_time` 为 ISO 8601 UTC 字符串，展示时本地化 */
 export type Data = {
   id: number
   d_no: string | null
-  c_time: string // ISO 8601 UTC
+  c_time: Date
 } & Record<FieldName, string | null>
 
 /**
@@ -59,18 +60,17 @@ export type Data = {
  * 对应接口：`GET /api/{source}/chart?d_no&start&end&buckets`（旧契约 `/api/data/chart` 的别名见 api.ts）。
  */
 export interface ChartPoint {
-  /** 桶内最大时间，ISO 8601 UTC */
-  c_time: string
-  [column: string]: string | number | null
+  c_time: Date
+  [column: string]: string | number | Date | null
 }
 
 /** 图表聚合查询参数（前端） */
 export interface ChartQueryParams {
   /** 设备编号 */
   d_no: string
-  /** 开始时间（含），ISO 8601 UTC（`Date.toISOString()`） */
+  /** 开始时间（含）'YYYY-MM-DD HH:mm:ss' */
   start: string
-  /** 结束时间（含），ISO 8601 UTC */
+  /** 结束时间（含） */
   end: string
   /** 目标桶数（降采样点数），默认 1000 */
   buckets?: number
@@ -117,6 +117,50 @@ export interface DataCount {
   count: number
 }
 
+/**
+ * 流量总计（库口径）：按落库帧的时间桶均值积分得到，单位 L。
+ * 对应接口：`GET /api/sensor/flow/total?d_no&start&end`。
+ */
+export interface FlowTotal {
+  /** 设备编号 */
+  d_no: string
+  /** 实际起算时刻（缺省时为该设备最早落库时刻；无数据为 null） */
+  start: Date | null
+  /** 实际截止时刻（缺省时为该设备最新落库时刻；无数据为 null） */
+  end: Date | null
+  /** 积分得到的流量总计（L，字符串保留 2 位小数） */
+  total: string
+}
+
+/**
+ * 累计流量清零结果：`devices` = 实际被清零的设备编号（无内存态也无落库帧的设备不会出现在其中）。
+ * 对应接口：`POST /api/sensor/flow/reset`。
+ */
+export interface FlowResetResult {
+  devices: string[]
+}
+
+/**
+ * 运行时长汇总：按落库帧累计的开关导通时长，单位秒。
+ *
+ * 口径：逐帧判断开关状态（`sensor_data` 里 `heat_Y1` / `water_Y2` 对应的列），
+ * 导通帧计入「与上一帧的间隔」（间隔超过 `sensor.derive.max_gap_seconds` 的段按封顶计入，
+ * 与流量积分同一口径）；开关关闭的帧不计入。
+ * 对应接口：`GET /api/sensor/runtime?d_no&start&end`。
+ */
+export interface RuntimeSummary {
+  /** 设备编号 */
+  d_no: string
+  /** 实际起算时刻（缺省时为该设备最早落库时刻；无数据为 null） */
+  start: Date | null
+  /** 实际截止时刻（缺省时为该设备最新落库时刻；无数据为 null） */
+  end: Date | null
+  /** 水泵累计运行时长（s，字符串保留 2 位小数） */
+  pump: string
+  /** 加热累计运行时长（s，字符串保留 2 位小数） */
+  heat: string
+}
+
 /** WHERE 操作符：按 SQL 占位符形态分四组，类型与运行时校验均由这些常量派生 */
 export const WHERE_OPERATORS_SINGLE_VALUE = [
   '=',
@@ -157,16 +201,23 @@ export type WhereMultiOperator = (typeof WHERE_OPERATORS_MULTI_VALUE)[number]
 export type WherePairOperator = (typeof WHERE_OPERATORS_PAIR_VALUE)[number]
 export type WhereNoValueOperator = (typeof WHERE_OPERATORS_NO_VALUE)[number]
 
-/** 恰好一个值：字符串或 Date（Date 经 JSON 序列化为 ISO 8601 UTC） */
+/**
+ * 单个条件值。
+ * 对外（HTTP query 的 `where` JSON）恒为字符串；内部时间条件（窗口起点、图表时间段）
+ * 可直接传 `Date`，由驱动按本机时区序列化为 `DATETIME` 字面量。
+ */
+export type WhereValue = string | Date
+
+/** 恰好一个值 */
 export interface WhereConditionSingle {
   operator: WhereSingleOperator
-  value: string | Date
+  value: WhereValue
 }
 
-/** `in` 任意非空个值（单值可写成字符串）；`between` 恰好 2 个 */
+/** `in` 任意非空个值（单值可写成裸值）；`between` 恰好 2 个 */
 export interface WhereConditionList {
   operator: WhereMultiOperator | WherePairOperator
-  value: string | string[] | Date | Date[]
+  value: WhereValue | WhereValue[]
 }
 
 /** 不带条件值 */
@@ -211,14 +262,15 @@ export interface DataQueryParams {
 export interface DataPayload {
   id: string // 设备/数据源 id（存入 t_data.d_no）
   time: string // 数据时间
-  temp_in: string | number // 温度1（进水，原 wen_du1）
-  temp_out: string | number // 温度2（出水，原 wen_du2）
-  heat_Y1: string | number // 加热开关状态（原 jia_re）
-  water_Y2: string | number // 水泵状态（原 shui_beng）
-  flow_rate: string | number // 瞬时流量 L/min（原 liu_liang2）
-  pressure: string | number // 水流压力
+  // 测量字段可为 `null`：命中 `sensor_data_mapper.invalid_value` 的无效上报值按缺测处理
+  temp_in: string | number | null // 温度1（进水，原 wen_du1）
+  temp_out: string | number | null // 温度2（出水，原 wen_du2）
+  heat_Y1: string | number | null // 加热开关状态（原 jia_re）
+  water_Y2: string | number | null // 水泵状态（原 shui_beng）
+  flow_rate: string | number | null // 瞬时流量 L/min（原 liu_liang2）
+  pressure: string | number | null // 水流压力
   // 预留：设备端累计流量（flow_source=0 数据验证时使用；当前设备端已移除，本地计算替代）
-  liu_liang1?: string | number
+  liu_liang1?: string | number | null
 }
 
 // 设备控制状态 (device_control) —— control/ 现为服务器下发 topic，已无入站处理
@@ -262,8 +314,7 @@ export type WsEventType = 'data' | 'alarm' | 'direct' | 'lock'
 // WebSocket 传感器数据推送（新数据结构）
 export interface WsData {
   d_no: string
-  /** 数据时间，ISO 8601 UTC */
-  timestamp: string
+  timestamp: Date
   wen_du1: string
   wen_du2: string
   jia_re: string
@@ -275,6 +326,10 @@ export interface WsData {
   heat_rate: string
   /** 实时平均水流(L/min)，基于配置窗口(avg_flow_window，默认60s)计算 */
   avg_flow: string
+  /** 水泵累计运行时长(s)：按上报帧间隔累加，仅开关导通时计入 */
+  pump_run_time?: string
+  /** 加热累计运行时长(s)：按上报帧间隔累加，仅开关导通时计入 */
+  heat_run_time?: string
   /** 数据质量标记：true=疑似跳变/无效数据（前端曲线标注，来自 sensor_spike mark 模式） */
   invalid?: boolean
 }
@@ -282,13 +337,11 @@ export interface WsData {
 // WebSocket 告警推送
 // type: 'alarm' 堵塞/故障预警 | 'error' 错误 | 'reset' 手动复位（清除该设备实时预警）
 export interface WsAlarm {
-  /** 预警唯一 ID `alarm_${d_no}_${毫秒时间戳}`（基于发生时间生成，用于前端重连去重） */
-  id: string
+  id: string // 预警唯一 ID（基于发生时间生成，用于前端重连去重）
   d_no: string
   type: 'alarm' | 'error' | 'reset'
   message: string
-  /** 发生时间，ISO 8601 UTC */
-  timestamp: string
+  timestamp: Date
   /** 告警事件码（如 pressure_zero / overpressure；由命中组件自行定义） */
   code?: string
   /** 等级：error=红 / warning=黄 */
@@ -325,8 +378,7 @@ export interface WsLock {
   reason?: string
   /** 限时锁到期时间戳(ms)；长期锁缺省 */
   expiresAt?: number
-  /** 状态变更时间，ISO 8601 UTC */
-  timestamp: string
+  timestamp: Date
 }
 
 export type WsMessageData = WsData | WsAlarm | WsDirectUpdate | WsLock

@@ -4,7 +4,15 @@ import { ElTabs, ElTabPane, ElPagination, ElButton } from 'element-plus'
 import DataTable from '../component/data/DataTable.vue'
 import DataFilter from '../component/data/DataFilter.vue'
 import DataChartView from '../component/data/DataChartView.vue'
-import { getData, getDataMapper, getCount, getDataDevices } from '../server/api'
+import {
+  getData,
+  getDataMapper,
+  getCount,
+  getDataDevices,
+  getFlowTotal,
+  getRuntimeTotal,
+} from '../server/api'
+import { fmtDuration, fmtNum, fmtServerTime } from '../utils/format'
 import type { ColumnDef } from '../types/dataType'
 import type { FilterOption, FilterValue } from '../component/data/DataFilter.vue'
 import type { Data, FieldMapper, Where, WhereCondition } from '@/server/types'
@@ -103,6 +111,64 @@ const filterOptions = ref<FilterOption[]>([
 // 筛选器状态
 const filterValue = ref<Record<string, FilterValue>>({})
 
+// 设备列表（汇总统计默认取第一个设备）
+const devices = ref<string[]>([])
+
+// 汇总数据：流量总计 / 水泵运行时长 / 加热运行时长
+const summary = ref<{
+  flowTotal: string | null
+  pumpRunTime: string | null
+  heatRunTime: string | null
+}>({ flowTotal: null, pumpRunTime: null, heatRunTime: null })
+const summaryLoading = ref(false)
+const summaryDevice = ref('')
+const summaryScope = ref('全部时间')
+
+/** 运行时长展示文本（接口未就绪 / 无数据时显 --） */
+const pumpRunTimeText = computed(() => fmtDuration(summary.value.pumpRunTime) || '--')
+const heatRunTimeText = computed(() => fmtDuration(summary.value.heatRunTime) || '--')
+
+/** 汇总统计的设备：筛选里选了就用它，否则用设备列表的第一个 */
+function resolveSummaryDevice(filters: Record<string, FilterValue>): string {
+  const picked = filters['d_no']
+  if (typeof picked === 'string' && picked) return picked
+  return devices.value[0] ?? ''
+}
+
+/**
+ * 加载汇总数据：跟随筛选的设备 + 时间范围（未设时间范围 = 该设备全部历史）。
+ * 两个接口各自独立降级：某个失败只把对应项置为 null（展示为 --），不影响另一个。
+ */
+async function loadSummary(filters: Record<string, FilterValue>) {
+  const range = filters['c_time']
+  const hasRange = Array.isArray(range)
+  const start = hasRange ? (range[0] as Date).toISOString() : undefined
+  const end = hasRange ? (range[1] as Date).toISOString() : undefined
+  const device = resolveSummaryDevice(filters)
+  summaryDevice.value = device
+  summaryScope.value = hasRange ? `${fmtServerTime(start)} ~ ${fmtServerTime(end)}` : '全部时间'
+  if (!device) {
+    summary.value = { flowTotal: null, pumpRunTime: null, heatRunTime: null }
+    return
+  }
+  summaryLoading.value = true
+  try {
+    const [flow, runtime] = await Promise.allSettled([
+      getFlowTotal(device, start, end),
+      getRuntimeTotal(device, start, end),
+    ] as const)
+    summary.value = {
+      flowTotal: flow.status === 'fulfilled' ? flow.value.total : null,
+      pumpRunTime: runtime.status === 'fulfilled' ? runtime.value.pump : null,
+      heatRunTime: runtime.status === 'fulfilled' ? runtime.value.heat : null,
+    }
+    if (flow.status === 'rejected') console.warn('获取流量总计失败:', flow.reason)
+    if (runtime.status === 'rejected') console.warn('获取运行时长失败:', runtime.reason)
+  } finally {
+    summaryLoading.value = false
+  }
+}
+
 // 加载数据
 async function loadData() {
   loading.value = true
@@ -122,6 +188,7 @@ async function loadData() {
 async function loadFilterOptions() {
   try {
     const deviceValues = await getDataDevices()
+    devices.value = deviceValues
     const deviceOption = filterOptions.value.find((o) => o.key === 'd_no')
     if (deviceOption) {
       deviceOption.values = deviceValues
@@ -164,6 +231,7 @@ function applyFilters(filters: Record<string, FilterValue>) {
   currentPage.value = 1
   syncStateToUrl()
   loadData()
+  loadSummary(filters)
 }
 
 // 分页变化
@@ -195,6 +263,7 @@ onMounted(async () => {
   fieldMappers.value = await getDataMapper('sensor')
   await loadFilterOptions()
   await loadData()
+  await loadSummary(filterValue.value)
   syncStateToUrl()
 })
 
@@ -216,6 +285,33 @@ function identify() {
             </span>
           </div>
 
+          <!-- 汇总数据（跟随筛选的设备与时间范围；时间范围未设 = 该设备全部历史） -->
+          <div class="summary-section" v-loading="summaryLoading">
+            <div class="summary-head">
+              <span class="summary-title">汇总数据</span>
+              <span class="summary-scope">
+                设备：{{ summaryDevice || '--' }} · 范围：{{ summaryScope }}
+              </span>
+            </div>
+            <div class="summary-grid">
+              <div class="summary-item">
+                <span class="summary-label">流量总计</span>
+                <span class="summary-value">
+                  {{ summary.flowTotal === null ? '--' : fmtNum(summary.flowTotal) }}
+                  <span v-if="summary.flowTotal !== null" class="summary-unit">L</span>
+                </span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">水泵运行时长</span>
+                <span class="summary-value">{{ pumpRunTimeText }}</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-label">加热运行时长</span>
+                <span class="summary-value">{{ heatRunTimeText }}</span>
+              </div>
+            </div>
+          </div>
+
           <!-- 筛选器 -->
           <div class="filter-section">
             <DataFilter v-model="filterValue" :options="filterOptions" @change="applyFilters" />
@@ -228,6 +324,7 @@ function identify() {
               :data="rawData"
               :columns="columns"
               :selectable="true"
+              empty-text="离线"
               @sort-change="onSortChange"
             />
           </div>
@@ -318,6 +415,67 @@ function identify() {
   z-index: 3;
 }
 
+.summary-section {
+  flex-shrink: 0;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  background: #fafcff;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.summary-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.summary-scope {
+  font-size: 12px;
+  color: #909399;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.summary-label {
+  font-size: 12px;
+  color: #909399;
+}
+
+.summary-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  overflow-wrap: anywhere;
+}
+
+.summary-unit {
+  font-size: 12px;
+  font-weight: 400;
+  color: #606266;
+  margin-left: 2px;
+}
+
 .pagination-section {
   flex-shrink: 0;
   display: flex;
@@ -366,6 +524,15 @@ function identify() {
 
   .filter-section {
     width: 100%;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .summary-value {
+    font-size: 16px;
   }
 
   .table-section,

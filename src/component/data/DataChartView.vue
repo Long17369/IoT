@@ -27,6 +27,8 @@ const QUICK_RANGES = [
   { label: '24小时', minutes: 1440 },
 ]
 const CUSTOM = -1
+// 选了"自定义"但还没选起止时间时的兜底窗口（分钟）
+const DEFAULT_WINDOW_MINUTES = 10
 
 // 拉取的时间桶数（= 期望点数）：一次取密，折线图直接用它
 const FETCH_BUCKETS = 1000
@@ -119,7 +121,7 @@ function padMissingBuckets(
     for (const key of Object.keys(row)) if (key !== 'c_time') keys.add(key)
   }
   const emptyRow = (idx: number): ChartPoint => {
-    const row: ChartPoint = { c_time: new Date(startMs + idx * step).toISOString() }
+    const row: ChartPoint = { c_time: new Date(startMs + idx * step) }
     for (const key of keys) row[key] = null
     return row
   }
@@ -169,7 +171,8 @@ function aggregateToBuckets(
 
   const sums = new Map<number, number[]>()
   const counts = new Map<number, number[]>()
-  const labels = new Map<number, string>()
+  // 桶标签（= 桶内最大时间，毫秒时间戳）
+  const labels = new Map<number, number>()
 
   for (const point of points) {
     const t = parseTime(point.c_time)
@@ -189,7 +192,7 @@ function aggregateToBuckets(
     counts.set(idx, bucketCounts)
     // 与后端一致：桶标签取桶内最大时间
     const prev = labels.get(idx)
-    if (!prev || t > parseTime(prev)) labels.set(idx, String(point.c_time))
+    if (prev === undefined || t > prev) labels.set(idx, t)
   }
 
   const rows: ChartPoint[] = []
@@ -197,7 +200,7 @@ function aggregateToBuckets(
     const bucketSums = sums.get(idx)
     const bucketCounts = counts.get(idx)
     const row: ChartPoint = {
-      c_time: labels.get(idx) ?? new Date(startMs + idx * step).toISOString(),
+      c_time: new Date(labels.get(idx) ?? startMs + idx * step),
     }
     columns.forEach((key, i) => {
       const count = bucketCounts?.[i] ?? 0
@@ -307,7 +310,8 @@ function getRange(): { start: Date; end: Date } {
   if (activeRange.value === CUSTOM && customRange.value) {
     return { start: customRange.value[0], end: customRange.value[1] }
   }
-  const start = new Date(end.getTime() - activeRange.value * 60 * 1000)
+  const minutes = activeRange.value === CUSTOM ? DEFAULT_WINDOW_MINUTES : activeRange.value
+  const start = new Date(end.getTime() - minutes * 60 * 1000)
   return { start, end }
 }
 
@@ -336,10 +340,11 @@ async function load() {
 
 function selectQuick(val: string | number | boolean | undefined) {
   const minutes = Number(val)
-  if (!isNaN(minutes)) {
-    activeRange.value = minutes
-    load()
-  }
+  if (isNaN(minutes)) return
+  activeRange.value = minutes
+  // 自定义：先不查，等选完起止时间由 applyCustom 触发
+  if (minutes === CUSTOM) return
+  load()
 }
 
 function applyCustom() {

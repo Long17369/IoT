@@ -47,3 +47,20 @@ export function fmtServerTime(val: unknown): string {
   const d = parseServerTime(val)
   return d ? d.toLocaleString() : String(val ?? '')
 }
+
+/**
+ * 秒数 → 可读时长：≥1 小时 `Xh MMm`、≥1 分钟 `Xm SSs`、否则 `Xs`。
+ * 空值 / 非数值 / 负数返回空串（占位文本由调用方决定）。
+ */
+export function fmtDuration(val: unknown): string {
+  if (val === null || val === undefined || val === '') return ''
+  const n = Number(val)
+  if (!Number.isFinite(n) || n < 0) return ''
+  const total = Math.round(n)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`
+  if (m > 0) return `${m}m ${String(s).padStart(2, '0')}s`
+  return `${s}s`
+}

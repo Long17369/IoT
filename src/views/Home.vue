@@ -71,22 +71,25 @@ const sensorData = computed(() => {
     <div class="sensor-grid">
       <StatusCard
         :title="label('field1', '进水温度')"
-        :value="sensorData?.wen_du1 ?? '--'"
+        :value="sensorData?.wen_du1"
         unit="°C"
+        empty-text="离线"
       />
       <StatusCard
         :title="label('field2', '出水温度')"
-        :value="sensorData?.wen_du2 ?? '--'"
+        :value="sensorData?.wen_du2"
         unit="°C"
+        empty-text="离线"
       />
-      <StatusCard title="加热速度" :value="sensorData?.heat_rate ?? '--'" unit="°C/min" />
-      <StatusCard title="压力" :value="sensorData?.pressure ?? '--'" unit="kPa" />
+      <StatusCard title="加热速度" :value="sensorData?.heat_rate" unit="°C/min" empty-text="离线" />
+      <StatusCard title="压力" :value="sensorData?.pressure" unit="kPa" empty-text="离线" />
       <StatusCard
         :title="label('field6', '瞬时流量')"
-        :value="sensorData?.liu_liang2 ?? '--'"
+        :value="sensorData?.liu_liang2"
         unit="L/min"
+        empty-text="离线"
       />
-      <StatusCard title="平均水流" :value="sensorData?.avg_flow ?? '--'" unit="L/min" />
+      <StatusCard title="平均水流" :value="sensorData?.avg_flow" unit="L/min" empty-text="离线" />
     </div>
 
     <!-- 当前设备信息 -->

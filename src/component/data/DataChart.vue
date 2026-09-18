@@ -97,6 +97,33 @@ function collectValues(cols: ColumnDef[]): number[] {
   return vals
 }
 
+/** X 轴最多展示的标签数：超过就按「整分 / 整时」步长抽稀（窄图再由 axisLabel.hideOverlap 丢弃重叠标签） */
+const MAX_X_LABELS = 8
+
+/** 跨天时标签带 月-日，字符串更长 → 再少放几个 */
+const CROSS_DAY_X_LABELS = 6
+
+/** 横轴抽稀可用的步长（秒）：整分 → 整时 → 整天 */
+const NICE_LABEL_STEPS_S = [
+  60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800, 604800,
+]
+
+/**
+ * 横轴标签间隔（跳过多少个点显示一个标签）。
+ *
+ * 步长取整分/整时档位，与采样间隔无关——每秒一个点时不会出现 18:37 这种不整齐的刻度。
+ */
+function xLabelInterval(count: number, spanMs: number, maxLabels: number): number {
+  if (count <= maxLabels) return 0
+  const spacing = spanMs > 0 && count > 1 ? spanMs / (count - 1) : 1000
+  const target = spanMs > 0 ? Math.max(spanMs / maxLabels, spacing) : spacing * maxLabels
+  const stepSec =
+    NICE_LABEL_STEPS_S.find((s) => s * 1000 >= target) ??
+    NICE_LABEL_STEPS_S[NICE_LABEL_STEPS_S.length - 1] ??
+    60
+  return Math.max(0, Math.round((stepSec * 1000) / spacing) - 1)
+}
+
 /** 舍入到 2 位小数，消除浮点误差（如 33.190000000000001 → 33.19） */
 function round2(v: number): number {
   return Math.round(v * 100) / 100
@@ -176,16 +203,21 @@ const lineBarOption = computed(() => {
     .map((d) => parseServerTime(d[xColKey ?? 'c_time'])?.getTime() ?? NaN)
     .filter((t) => !isNaN(t))
   const spanMs = rawTimes.length > 1 ? Math.max(...rawTimes) - Math.min(...rawTimes) : 0
+  /** 数据是否跨天：跨天时横轴补上月-日，否则只有 时:分 看不出是哪天 */
+  const crossDay =
+    rawTimes.length > 1 &&
+    new Date(Math.min(...rawTimes)).toDateString() !==
+      new Date(Math.max(...rawTimes)).toDateString()
 
-  // 格式化时间（本地时区）：默认 MM:SS；xTimeFormat='full' 时短范围 HH:MM:SS、长范围 MM-DD HH:MM
+  // 格式化时间（本地时区）：默认 MM:SS；xTimeFormat='full' 时分钟级——不跨天 时:分、跨天 月-日 时:分
   const formatTime = (val: unknown): string => {
     const d = parseServerTime(val)
     if (!d) return String(val ?? '')
     if (props.xTimeFormat !== 'full') {
       return d.toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })
     }
-    if (spanMs > 0 && spanMs <= 3600_000) {
-      return d.toLocaleTimeString([], { hour12: false })
+    if (!crossDay) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
     }
     return d.toLocaleString([], {
       month: '2-digit',
@@ -199,6 +231,17 @@ const lineBarOption = computed(() => {
   const xData = xCol
     ? props.data.map((d) => formatTime(d[xCol.key]))
     : props.data.map((_, i) => `#${i + 1}`)
+
+  /** 横轴：标签抽稀到约 maxLabels 个（跨天标签更长，数量再少些；窄图由 hideOverlap 丢弃重叠标签） */
+  const xAxis = {
+    type: 'category' as const,
+    data: xData,
+    name: xCol?.label ?? '',
+    axisLabel: {
+      hideOverlap: true,
+      interval: xLabelInterval(xData.length, spanMs, crossDay ? CROSS_DAY_X_LABELS : MAX_X_LABELS),
+    },
+  }
 
   const cols = chartColumns.value
   const hasData = cols.length > 0 && props.data.length > 0
@@ -250,7 +293,7 @@ const lineBarOption = computed(() => {
     return {
       ...baseOption,
       grid: { left: 60, right: 40, top: 30, bottom: 60 },
-      xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
+      xAxis,
       yAxis: [
         {
           type: 'value',
@@ -306,7 +349,7 @@ const lineBarOption = computed(() => {
   return {
     ...baseOption,
     grid: { left: 60, right: 60, top: 30, bottom: 60 },
-    xAxis: { type: 'category', data: xData, name: xCol?.label ?? '', axisLabel: { rotate: 30 } },
+    xAxis,
     yAxis,
     series,
   }

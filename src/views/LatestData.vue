@@ -15,6 +15,9 @@ const fieldMappers = ref<FieldMapper[]>([])
 const POINT_OPTIONS = [5, 10, 20, 30, 50]
 const pointCount = ref(10)
 
+// 卡片额外展示的开关类字段（后端字段映射里 visible=0，只在实时数据卡片上展示）
+const CARD_SWITCH_KEYS = ['field3', 'field4']
+
 // WebSocket 实时数据（模块级缓存：切页面不销毁，后台持续更新）
 const { latestSensorData, recentRecords, isOffline } = useWebSocket()
 
@@ -23,10 +26,10 @@ const devices = ref<string[]>([])
 const selectedDevice = ref('')
 
 // 最新一条数据：直接来自 WS 实时缓存（不再从数据库加载）
-const latestRecord = computed<Data | null>(() => {
+const latestRecord = computed<Record<string, unknown> | null>(() => {
   if (!selectedDevice.value) return null
   const ws = latestSensorData.value.get(selectedDevice.value)
-  return ws ? toDataRecord(ws) : null
+  return ws ? toCardRecord(ws) : null
 })
 
 // 图表数据：来自 WS 后台缓存的最近记录（切页面不销毁）
@@ -53,7 +56,9 @@ const cardFields = computed<CardField[]>(() => {
     { key: 'c_time', label: '更新时间', section: 'footer', format: 'datetime' },
   ]
 
-  const sorted = fieldMappers.value.filter((m) => m.visible === '1').sort((a, b) => a.id - b.id)
+  const sorted = fieldMappers.value
+    .filter((m) => m.visible === '1' || CARD_SWITCH_KEYS.includes(m.db_name))
+    .sort((a, b) => a.id - b.id)
 
   for (const m of sorted) {
     fields.push({
@@ -62,14 +67,16 @@ const cardFields = computed<CardField[]>(() => {
       unit: m.unit || undefined,
       section: 'body',
       tag: true,
+      // 该字段声明了词表 → 值映射为显示名（如 0→关 / 1→开）
+      ...(m.mapping ? { mapper: parseMapping(m.mapping) } : {}),
     })
   }
 
-  // 实时计算指标（不在 t_field_mapper，来自 WS 推送的 heat_rate/avg_flow）
+  // 实时派生指标（不在字段映射表里，来自 WS 推送的 heat_rate/avg_flow）
   const calcKeys = new Set(fields.map((f) => f.key))
   const calcFields: CardField[] = [
-    { key: 'field8', label: '加热速度', unit: '°C/min', section: 'body', tag: true },
-    { key: 'field9', label: '平均水流', unit: 'L/min', section: 'body', tag: true },
+    { key: 'heat_rate', label: '加热速度', unit: '°C/min', section: 'body', tag: true },
+    { key: 'avg_flow', label: '平均水流', unit: 'L/min', section: 'body', tag: true },
   ]
   for (const cf of calcFields) if (!calcKeys.has(cf.key)) fields.push(cf)
   return fields
@@ -98,12 +105,23 @@ async function loadMappers() {
   }
 }
 
+/** 解析后端下发的映射词表（JSON：值 -> 显示名）；无效 JSON 按无映射处理 */
+function parseMapping(mapping: string): Record<string, string> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(mapping)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+    return parsed as Record<string, string>
+  } catch {
+    return undefined
+  }
+}
+
 // 切换设备时仅刷新字段映射（数据直接来自 WS 后台缓存，无需从数据库加载）
 watch(selectedDevice, () => {
   loadMappers()
 })
 
-// 将 WS 实时数据转换为 Data 记录（最新卡片 + 趋势图共用）
+// 将 WS 实时数据转换为 Data 记录（趋势图用；列名与后端字段映射的 db_name 对齐）
 function toDataRecord(wsData: WsData): Data {
   return {
     id: 0,
@@ -115,10 +133,19 @@ function toDataRecord(wsData: WsData): Data {
     field5: wsData.liu_liang1,
     field6: wsData.liu_liang2,
     field7: wsData.pressure,
-    field8: wsData.heat_rate,
-    field9: wsData.avg_flow,
+    field8: wsData.pump_run_time ?? null,
+    field9: wsData.heat_run_time ?? null,
     field10: null,
     c_time: wsData.timestamp,
+  }
+}
+
+/** 最新数据卡片用记录：Data 字段 + 实时派生指标（不在字段映射表里的 heat_rate/avg_flow） */
+function toCardRecord(wsData: WsData): Record<string, unknown> {
+  return {
+    ...toDataRecord(wsData),
+    heat_rate: wsData.heat_rate,
+    avg_flow: wsData.avg_flow,
   }
 }
 </script>
@@ -139,11 +166,7 @@ function toDataRecord(wsData: WsData): Data {
         最新数据
       </h3>
       <div v-if="!latestRecord" class="empty-state">暂无数据</div>
-      <DataCard
-        v-else
-        :data="latestRecord as unknown as Record<string, unknown>"
-        :fields="cardFields"
-      >
+      <DataCard v-else :data="latestRecord" :fields="cardFields" empty-text="离线">
         <template #header-right>
           <ElTag
             v-if="selectedDevice && isOffline(selectedDevice)"

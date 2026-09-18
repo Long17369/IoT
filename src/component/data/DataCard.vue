@@ -4,18 +4,34 @@ import { ElTag } from 'element-plus'
 import { fmtNum, fmtServerTime } from '@/utils/format'
 import type { CardField } from '../../types/dataType'
 
-const props = defineProps<{
-  data: Record<string, unknown>
-  fields: CardField[]
-  title?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    data: Record<string, unknown>
+    fields: CardField[]
+    title?: string
+    /** 值为空（null / undefined / 空串）时显示的占位文本，默认空白 */
+    emptyText?: string
+  }>(),
+  { emptyText: '' },
+)
 
 const headerFields = computed(() => props.fields.filter((f) => f.section === 'header'))
 const bodyFields = computed(() => props.fields.filter((f) => !f.section || f.section === 'body'))
 const footerFields = computed(() => props.fields.filter((f) => f.section === 'footer'))
 
+/** 空值（缺测：库中 NULL / 推送空串）判定 */
+function isEmpty(val: unknown): boolean {
+  return val === null || val === undefined || val === ''
+}
+
 function fmt(val: unknown, field: CardField): string {
-  if (field.format === 'datetime') return fmtServerTime(val)
+  // 时间列：服务端时间（JSON 出网为 ISO 字符串）→ 浏览器本地时间
+  if (field.format === 'datetime' || field.key === 'c_time')
+    return isEmpty(val) ? props.emptyText : fmtServerTime(val)
+  if (isEmpty(val)) return props.emptyText
+  // 值映射（由字段映射 mapper 驱动）
+  const mapped = field.mapper?.[String(val)]
+  if (mapped !== undefined) return mapped
   const v = fmtNum(val)
   return field.unit ? `${v}${field.unit}` : v
 }

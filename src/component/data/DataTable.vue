@@ -4,13 +4,18 @@ import { ElTable, ElTableColumn, ElTag } from 'element-plus'
 import { fmtNum } from '@/utils/format'
 import type { ColumnDef, SortInfo } from '../../types/dataType'
 
-const props = defineProps<{
-  /** 要展示的数据（已由上层切片） */
-  data: Record<string, unknown>[]
-  columns: ColumnDef[]
-  /** 是否启用行选择（在首列渲染 checkbox），默认 false */
-  selectable?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** 要展示的数据（已由上层切片） */
+    data: Record<string, unknown>[]
+    columns: ColumnDef[]
+    /** 是否启用行选择（在首列渲染 checkbox），默认 false */
+    selectable?: boolean
+    /** 值为空（null / undefined / 空串）时显示的占位文本，默认空白 */
+    emptyText?: string
+  }>(),
+  { selectable: false, emptyText: '' },
+)
 
 const emit = defineEmits<{
   'sort-change': [info: SortInfo]
@@ -47,6 +52,8 @@ function cellText(row: Record<string, unknown>, col: ColumnDef): string {
   const val = row[col.key]
   // 时间字段格式化
   if (col.key === 'c_time') return formatTime(val)
+  // 缺测（null / undefined / 空串）
+  if (val === null || val === undefined || val === '') return props.emptyText
   // 值映射（由字段映射 mapper 驱动）
   if (col.mapper) {
     const key = String(val)
